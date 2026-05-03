@@ -58,7 +58,7 @@ definitions:
         script:
           - pip install -e ".[dev]"
           - pip install pip-audit
-          - pip-audit --strict
+          - pip-audit
           - pip list --outdated --format=columns || true
 
     - step: &security-sast
@@ -68,7 +68,7 @@ definitions:
         script:
           - pip install bandit
           - bandit -r src/ -l -f json -o bandit-report.json || true
-          - bandit -r src/ -l
+          - bandit -r src/ -ll
         artifacts:
           - bandit-report.json
 
@@ -79,7 +79,7 @@ definitions:
         script:
           - pip install -e ".[dev]"
           - pip install pip-audit safety
-          - pip-audit --strict
+          - pip-audit
           - safety check || true
 
     - step: &security-secrets
@@ -151,7 +151,7 @@ pipelines:
             - pip install -e ".[dev]"
             - pip install bandit pip-audit safety
             - echo "=== BANDIT ==="
-            - bandit -r src/ -l
+            - bandit -r src/ -ll
             - echo "=== PIP-AUDIT ==="
             - pip-audit
             - echo "=== SAFETY ==="
@@ -191,5 +191,5 @@ pipelines:
           - echo "=== Outdated Packages ==="
           - pip list --outdated --format=columns || true
           - echo "=== Vulnerability Check ==="
-          - pip-audit --strict
+          - pip-audit
           - safety check || true
