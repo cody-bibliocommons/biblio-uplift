@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+.venv/
+logs/
+*.tar.gz
+.mypy_cache/
+.pytest_cache/
+.coverage
+coverage.xml
