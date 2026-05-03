@@ -10,9 +10,10 @@ definitions:
           - pip
         script:
           - pip install -e ".[dev]"
-          - pytest --cov=biblio_uplift --cov-report=term-missing --cov-report=xml:coverage.xml --cov-fail-under=95 -v
+          - pytest --cov=biblio_uplift --cov-report=term-missing --cov-report=xml:coverage.xml --cov-fail-under=95 --junitxml=test-results/junit.xml -v
         artifacts:
           - coverage.xml
+          - test-results/**
 
     - step: &lint
         name: Lint (Ruff)
