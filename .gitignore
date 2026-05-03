@@ -12,3 +12,4 @@ logs/
 .pytest_cache/
 .coverage
 coverage.xml
+test-results/
