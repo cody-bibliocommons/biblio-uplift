@@ -1,0 +1,237 @@
+from __future__ import annotations
+
+import fcntl
+import logging
+import os
+import subprocess as _subprocess  # nosec B404
+import tempfile
+import threading
+import time
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from enum import Enum
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from biblio_uplift.config.schema import ProjectConfig
+    from biblio_uplift.core.ssh import SSHRunner
+
+logger = logging.getLogger(__name__)
+
+
+class StepStatus(str, Enum):
+    PENDING = "pending"
+    RUNNING = "running"
+    SUCCESS = "success"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+
+
+@dataclass
+class StepResult:
+    status: StepStatus
+    message: str = ""
+    error: str = ""
+    duration: float = 0.0
+    details: dict[str, Any] = field(default_factory=dict)
+
+
+class PipelineStep:
+    """Base class for all pipeline steps."""
+
+    name: str = "unnamed"
+    description: str = ""
+    skippable: bool = True
+
+    def __init__(self):
+        self.status = StepStatus.PENDING
+        self.result: StepResult | None = None
+
+    def execute(self, ctx: PipelineContext) -> StepResult:
+        """Override in subclasses. Run the step logic."""
+        raise NotImplementedError
+
+    def rollback(self, ctx: PipelineContext) -> None:
+        """Optional rollback logic. Override if needed."""
+        pass
+
+
+@dataclass
+class PipelineContext:
+    """Shared context passed to all steps."""
+
+    config: ProjectConfig
+    ssh: SSHRunner
+    on_output: Callable[[str], None] | None = None
+    on_step_change: Callable[[PipelineStep], None] | None = None
+    dry_run: bool = False
+    skip_steps: set[str] = field(default_factory=set)
+    state: dict[str, Any] = field(default_factory=dict)
+    cancelled: threading.Event = field(default_factory=threading.Event)
+
+
+class Pipeline:
+    """Runs a sequence of PipelineSteps."""
+
+    def __init__(self, name: str, steps: list[PipelineStep]):
+        self.name = name
+        self.steps = steps
+        self.start_time: float | None = None
+        self.end_time: float | None = None
+        self._lock_file: Any = None
+
+    def _acquire_lock(self, config) -> bool:
+        lock_path = Path(tempfile.gettempdir()) / f"biblio-uplift-{config.name}.lock"
+        try:
+            self._lock_file = open(lock_path, "w")
+            fcntl.flock(self._lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            self._lock_file.write(str(os.getpid()))
+            self._lock_file.flush()
+            return True
+        except OSError:
+            if self._lock_file:
+                self._lock_file.close()
+                self._lock_file = None
+            return False
+
+    def _release_lock(self):
+        if self._lock_file:
+            try:
+                fcntl.flock(self._lock_file, fcntl.LOCK_UN)
+                self._lock_file.close()
+            except Exception as e:
+                logger.debug("Lock release failed: %s", e)
+
+    @property
+    def duration(self) -> float:
+        if self.start_time is None:
+            return 0.0
+        end = self.end_time or time.monotonic()
+        return end - self.start_time
+
+    def run(self, ctx: PipelineContext) -> bool:
+        """Run all steps. Returns True if all succeeded/skipped."""
+        if not self._acquire_lock(ctx.config):
+            logger.error("Another upgrade is already running for %s", ctx.config.name)
+            if ctx.on_output:
+                ctx.on_output(f"ERROR: Another upgrade is already running for {ctx.config.name}")
+            return False
+
+        self.start_time = time.monotonic()
+        success = True
+
+        try:
+            for step in self.steps:
+                if ctx.cancelled.is_set():
+                    success = False
+                    step.status = StepStatus.SKIPPED
+                    step.result = StepResult(status=StepStatus.SKIPPED, message="Cancelled by user")
+                    if ctx.on_step_change:
+                        ctx.on_step_change(step)
+                    continue
+
+                if ctx.dry_run and step.skippable:
+                    step.status = StepStatus.SKIPPED
+                    step.result = StepResult(status=StepStatus.SKIPPED, message="Dry run — skipped")
+                    if ctx.on_step_change:
+                        ctx.on_step_change(step)
+                    logger.info("DRY RUN SKIP: %s", step.name)
+                    continue
+
+                if step.name in ctx.skip_steps:
+                    step.status = StepStatus.SKIPPED
+                    step.result = StepResult(status=StepStatus.SKIPPED, message="Skipped by user")
+                    if ctx.on_step_change:
+                        ctx.on_step_change(step)
+                    logger.info("SKIP: %s", step.name)
+                    continue
+
+                step.status = StepStatus.RUNNING
+                if ctx.on_step_change:
+                    ctx.on_step_change(step)
+                logger.info("START: %s", step.name)
+
+                start = time.monotonic()
+                try:
+                    result = step.execute(ctx)
+                except Exception as e:
+                    result = StepResult(
+                        status=StepStatus.FAILED,
+                        error=str(e),
+                        duration=time.monotonic() - start,
+                    )
+                    logger.exception("EXCEPTION in %s", step.name)
+
+                result.duration = time.monotonic() - start
+                step.status = result.status
+                step.result = result
+
+                if ctx.on_step_change:
+                    ctx.on_step_change(step)
+
+                if result.status == StepStatus.SUCCESS:
+                    ctx.state.setdefault("_completed_steps", []).append(step.name)
+
+                if result.status == StepStatus.FAILED:
+                    logger.error("FAIL: %s — %s", step.name, result.error)
+                    success = False
+                    # Rollback completed steps in reverse
+                    if ctx.on_output:
+                        ctx.on_output("Initiating rollback...")
+                    for completed in reversed(self.steps[: self.steps.index(step)]):
+                        if completed.status == StepStatus.SUCCESS:
+                            try:
+                                completed.rollback(ctx)
+                            except Exception as e:
+                                logger.warning("Rollback failed for %s: %s", completed.name, e)
+                    # Fire failure notification
+                    self._fire_failure_hook(ctx)
+                    break
+                else:
+                    logger.info("DONE: %s (%.1fs)", step.name, result.duration)
+
+            # Fire failure notification for cancellation (not already fired by FAILED block)
+            if not success and ctx.cancelled.is_set():
+                self._fire_failure_hook(ctx)
+        finally:
+            self.end_time = time.monotonic()
+            if success and hasattr(ctx.config, "on_success_cmd") and ctx.config.on_success_cmd:
+                self._fire_notification(ctx.config.on_success_cmd, ctx)
+            self._release_lock()
+        return success
+
+    def _fire_failure_hook(self, ctx: PipelineContext) -> None:
+        """Execute the on_failure_cmd if configured."""
+        if hasattr(ctx.config, "on_failure_cmd") and ctx.config.on_failure_cmd:
+            self._fire_notification(ctx.config.on_failure_cmd, ctx)
+
+    def _fire_notification(self, cmd: str, ctx: PipelineContext) -> None:
+        """Run a notification command locally."""
+        try:
+            if ctx.on_output:
+                ctx.on_output(f"Running notification: {cmd}")
+            result = _subprocess.run(
+                cmd,
+                shell=True,
+                capture_output=True,
+                text=True,
+                timeout=30,  # nosec B602
+            )
+            if result.returncode != 0:
+                logger.warning("Notification command failed: %s", result.stderr)
+        except Exception as e:
+            logger.warning("Notification failed: %s", e)
+
+    def get_summary(self) -> list[dict[str, Any]]:
+        """Return a summary of all step results."""
+        return [
+            {
+                "name": s.name,
+                "status": s.status.value,
+                "duration": s.result.duration if s.result else 0,
+                "message": s.result.message if s.result else "",
+                "error": s.result.error if s.result else "",
+            }
+            for s in self.steps
+        ]

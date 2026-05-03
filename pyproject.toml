@@ -1,0 +1,71 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "biblio-uplift"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = [
+    "textual==8.2.5",
+    "rich==15.0.0",
+    "click==8.3.3",
+    "pydantic==2.13.3",
+    "pyyaml==6.0.3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==9.0.3",
+    "pytest-cov==7.1.0",
+    "bandit==1.9.4",
+    "safety==3.7.0",
+    "mypy==1.20.2",
+    "ruff==0.15.12",
+    "types-PyYAML==6.0.12.20260408",
+    "yamllint>=1.35.0",
+    "mdformat>=0.7.0",
+]
+
+[project.scripts]
+biblio-uplift = "biblio_uplift.cli.main:cli"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+biblio_uplift = ["tui/css/*.tcss"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["biblio_uplift"]
+omit = ["*/tui/*"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "S", "T20", "SIM"]
+ignore = ["S603", "S604", "S602", "S108", "S101", "SIM115", "SIM117", "SIM108", "S110"]
+# S603/S604/S602 = subprocess calls (we need them for SSH)
+# S108 = hardcoded tmp (we use tempfile.gettempdir)
+# S101 = assert (used in tests)
+# SIM115 = context manager for open (we need manual lock file handling)
+# SIM117 = nested with (readability preference)
+# SIM108 = ternary operator (readability preference)
+# S110 = try-except-pass (intentional in TUI error handling)
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101", "S106", "S108", "B017", "SIM108", "E501"]
+"src/biblio_uplift/tui/*" = ["E501"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = false
+warn_unused_configs = true
+ignore_missing_imports = true
+disallow_untyped_defs = false
+exclude = ["tests/", "tui/"]

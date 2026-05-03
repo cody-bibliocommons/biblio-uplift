@@ -1,0 +1,191 @@
+image: python:3.12-slim
+
+definitions:
+  caches:
+    pip: ~/.cache/pip
+  steps:
+    - step: &test
+        name: Test
+        caches:
+          - pip
+        script:
+          - pip install -e ".[dev]"
+          - pytest --cov=biblio_uplift --cov-report=term-missing --cov-report=xml:coverage.xml --cov-fail-under=95 -v
+        artifacts:
+          - coverage.xml
+
+    - step: &lint
+        name: Lint (Ruff)
+        caches:
+          - pip
+        script:
+          - pip install ruff
+          - ruff check src/ tests/
+          - ruff format --check src/ tests/
+
+    - step: &typecheck
+        name: Type Check (mypy)
+        caches:
+          - pip
+        script:
+          - pip install -e ".[dev]"
+          - mypy src/biblio_uplift/ --exclude tui
+
+    - step: &lint-yaml
+        name: Lint YAML
+        caches:
+          - pip
+        script:
+          - pip install yamllint
+          - yamllint -s configs/ bitbucket-pipelines.yml .yamllint.yml
+
+    - step: &lint-markdown
+        name: Lint Markdown
+        caches:
+          - pip
+        script:
+          - pip install mdformat
+          - mdformat --check README.md
+
+    - step: &deps-check
+        name: Dependency Updates
+        caches:
+          - pip
+        script:
+          - pip install -e ".[dev]"
+          - pip install pip-audit
+          - pip-audit --strict
+          - pip list --outdated --format=columns || true
+
+    - step: &security-sast
+        name: Security - SAST (Bandit)
+        caches:
+          - pip
+        script:
+          - pip install bandit
+          - bandit -r src/ -l -f json -o bandit-report.json || true
+          - bandit -r src/ -l
+        artifacts:
+          - bandit-report.json
+
+    - step: &security-deps
+        name: Security - Dependencies
+        caches:
+          - pip
+        script:
+          - pip install -e ".[dev]"
+          - pip install pip-audit safety
+          - pip-audit --strict
+          - safety check || true
+
+    - step: &security-secrets
+        name: Security - Secret Scan
+        image: zricethezav/gitleaks:latest
+        script:
+          - gitleaks detect --source . --verbose
+
+pipelines:
+  default:
+    - parallel:
+        - step: *test
+        - step: *lint
+        - step: *typecheck
+        - step: *lint-yaml
+        - step: *lint-markdown
+    - parallel:
+        - step: *security-sast
+        - step: *security-deps
+        - step: *security-secrets
+        - step: *deps-check
+
+  pull-requests:
+    '**':
+      - parallel:
+          - step: *test
+          - step: *lint
+          - step: *typecheck
+          - step: *lint-yaml
+          - step: *lint-markdown
+      - parallel:
+          - step: *security-sast
+          - step: *security-deps
+
+  branches:
+    main:
+      - parallel:
+          - step: *test
+          - step: *lint
+          - step: *typecheck
+          - step: *lint-yaml
+          - step: *lint-markdown
+      - parallel:
+          - step: *security-sast
+          - step: *security-deps
+          - step: *security-secrets
+          - step: *deps-check
+      - step:
+          name: Build Package
+          caches:
+            - pip
+          script:
+            - pip install build
+            - python -m build
+          artifacts:
+            - dist/*
+
+  custom:
+    full-security-audit:
+      - parallel:
+          - step: *security-sast
+          - step: *security-deps
+          - step: *security-secrets
+      - step:
+          name: Full Security Report
+          caches:
+            - pip
+          script:
+            - pip install -e ".[dev]"
+            - pip install bandit pip-audit safety
+            - echo "=== BANDIT ==="
+            - bandit -r src/ -l
+            - echo "=== PIP-AUDIT ==="
+            - pip-audit
+            - echo "=== SAFETY ==="
+            - safety check || true
+            - echo "=== All security checks complete ==="
+
+    release:
+      - step: *test
+      - step: *lint
+      - step: *typecheck
+      - parallel:
+          - step: *security-sast
+          - step: *security-deps
+          - step: *security-secrets
+      - step:
+          name: Build & Tag Release
+          caches:
+            - pip
+          script:
+            - pip install build
+            - python -m build
+            - VERSION=$(python -c "from biblio_uplift import __version__; print(__version__)")
+            - echo "Built version $VERSION"
+          artifacts:
+            - dist/*
+
+  schedules:
+    weekly-deps-check:
+      cron: '0 8 * * 1'  # Monday 8am UTC
+      step:
+        name: Weekly Dependency Audit
+        caches:
+          - pip
+        script:
+          - pip install -e ".[dev]"
+          - pip install pip-audit safety
+          - echo "=== Outdated Packages ==="
+          - pip list --outdated --format=columns || true
+          - echo "=== Vulnerability Check ==="
+          - pip-audit --strict
+          - safety check || true

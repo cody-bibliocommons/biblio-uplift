@@ -1,0 +1,42 @@
+name: itops-vaultwarden
+ssh_host: ops-liv-vaultwarden01.bcommons.net
+ssh_user: ansible
+ssh_key: ~/.ssh/integration.pem
+sudo: true
+project_dir: /opt/docker/itops-vaultwarden
+compose_files:
+  - docker-compose.yml
+backup_dir: /var/backups/itops/itops-vaultwarden
+backup_retention: 5
+volumes:
+  - vaultwarden_data
+  - vaultwarden_vault
+extra_backup_paths:
+  - /opt/docker/itops-vaultwarden/.env
+  - /opt/docker/itops-vaultwarden/.secrets
+  - /opt/docker/itops-vaultwarden/haproxy
+  - /opt/docker/itops-vaultwarden/mariadb
+  - /opt/docker/itops-vaultwarden/ssl
+healthcheck_urls:
+  - https://ops-liv-vaultwarden01.bcommons.net
+healthcheck_timeout: 120
+skip_os_update: false
+skip_reboot: false
+# ssh_port: 22
+# git_branch: main
+# maintenance_window: "02:00-06:00"
+# on_success_cmd: "curl -X POST https://hooks.slack.com/..."
+# on_failure_cmd: "curl -X POST https://hooks.slack.com/..."
+pre_upgrade_hooks: []
+post_upgrade_hooks: []
+# pre_upgrade_hooks:
+#   - "/opt/scripts/notify-slack.sh 'Starting upgrade'"
+# post_upgrade_hooks:
+#   - "/opt/scripts/notify-slack.sh 'Upgrade complete'"
+cleanup:
+  prune_images: true
+  prune_volumes: false
+  prune_containers: true
+  prune_build_cache: true
+  log_retention_days: 30
+  log_paths: []
