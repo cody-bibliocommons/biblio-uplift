@@ -1,0 +1,298 @@
+/* =============================================================================
+ * Biblio Uplift — TUI Styles
+ * ============================================================================= */
+
+
+/* Screen & App Layout */
+
+Screen {
+    background: $surface;
+}
+
+#app-layout {
+    width: 100%;
+    height: 1fr;
+}
+
+
+/* ContentSwitcher */
+
+#content-switcher {
+    width: 1fr;
+    height: 1fr;
+    padding: 1 2;
+}
+
+
+/* Status Colors */
+
+.success {
+    color: $success;
+}
+
+.success-bg {
+    background: $success 20%;
+    color: $success;
+}
+
+.warning {
+    color: $warning;
+}
+
+.warning-bg {
+    background: $warning 20%;
+    color: $warning;
+}
+
+.error {
+    color: $error;
+}
+
+.error-bg {
+    background: $error 20%;
+    color: $error;
+}
+
+.info {
+    color: $primary;
+}
+
+.pending {
+    color: $text-muted;
+}
+
+
+/* DataTable */
+
+DataTable {
+    height: 1fr;
+    width: 100%;
+    background: $surface;
+    border: solid $primary-darken-2;
+    scrollbar-gutter: stable;
+}
+
+DataTable > .datatable--header {
+    background: $primary-darken-1;
+    color: $text;
+    text-style: bold;
+}
+
+DataTable > .datatable--header-hover {
+    background: $primary;
+    text-style: bold;
+}
+
+DataTable > .datatable--even-row {
+    background: $surface;
+}
+
+DataTable > .datatable--odd-row {
+    background: $surface-darken-1;
+}
+
+DataTable > .datatable--cursor {
+    background: $primary 40%;
+    text-style: bold;
+}
+
+DataTable > .datatable--hover {
+    background: $primary 25%;
+}
+
+
+/* RichLog */
+
+RichLog {
+    background: $surface-darken-1;
+    border: solid $primary-darken-2;
+    padding: 1;
+    height: 1fr;
+    scrollbar-gutter: stable;
+}
+
+
+/* Form Inputs */
+
+Input {
+    margin: 1 0;
+    border: solid $primary-darken-2;
+    background: $surface;
+}
+
+Input:focus {
+    border: solid $primary;
+}
+
+Input.-valid {
+    border: solid $success;
+}
+
+Input.-invalid {
+    border: solid $error;
+}
+
+Switch {
+    margin: 0 0 0 1;
+}
+
+Select {
+    margin: 1 0;
+    border: solid $primary-darken-2;
+}
+
+Select:focus {
+    border: solid $primary;
+}
+
+
+/* Buttons */
+
+Button {
+    margin: 0 1;
+    min-width: 12;
+}
+
+Button.-primary {
+    background: $primary;
+    color: $text;
+}
+
+Button.-primary:hover {
+    background: $primary-lighten-1;
+    text-style: bold;
+}
+
+Button.-success {
+    background: $success;
+    color: $text;
+}
+
+Button.-success:hover {
+    background: $success-lighten-1;
+    text-style: bold;
+}
+
+Button.-warning {
+    background: $warning;
+    color: $text;
+}
+
+Button.-error {
+    background: $error;
+    color: $text;
+}
+
+Button:disabled {
+    opacity: 0.5;
+    background: $panel;
+}
+
+
+/* Action Bars */
+
+.action-bar {
+    dock: bottom;
+    height: auto;
+    padding: 1 0;
+    layout: horizontal;
+    align: right middle;
+}
+
+.action-bar Button {
+    margin: 0 1;
+}
+
+
+/* Panels */
+
+.panel {
+    border: solid $primary-darken-2;
+    padding: 1;
+    margin: 1;
+    background: $surface;
+}
+
+.panel-header {
+    text-style: bold;
+    color: $primary;
+    padding: 0 0 1 0;
+    border-bottom: solid $primary-darken-2;
+    margin-bottom: 1;
+}
+
+.panel.-success {
+    border: solid $success-darken-1;
+}
+
+.panel.-warning {
+    border: solid $warning-darken-1;
+}
+
+.panel.-error {
+    border: solid $error-darken-1;
+}
+
+
+/* Section Headers */
+
+.section-header {
+    text-style: bold;
+    color: $primary;
+    padding: 1 0;
+    border-bottom: solid $primary-darken-2;
+}
+
+
+/* Loading Indicators */
+
+LoadingIndicator {
+    color: $primary;
+    width: auto;
+    height: auto;
+}
+
+.loading-overlay {
+    layer: overlay;
+    width: 100%;
+    height: 100%;
+    align: center middle;
+    background: $surface 80%;
+    display: none;
+}
+
+.loading-overlay.-visible {
+    display: block;
+}
+
+ProgressBar > .bar--bar {
+    color: $primary;
+}
+
+ProgressBar > .bar--complete {
+    color: $success;
+}
+
+
+/* Labels & Text Utilities */
+
+.text-muted {
+    color: $text-muted;
+}
+
+.text-bold {
+    text-style: bold;
+}
+
+
+/* Layout Helpers */
+
+.row {
+    layout: horizontal;
+    height: auto;
+}
+
+.column {
+    layout: vertical;
+    width: 1fr;
+}
