@@ -44,6 +44,10 @@ def load_resume_state() -> dict[str, Any] | None:
         return None
     try:
         data = json.loads(path.read_text())
+        # Validate required keys
+        if not isinstance(data, dict) or "project" not in data or "completed_steps" not in data:
+            logger.warning("Resume state missing required keys, ignoring")
+            return None
         return data
     except (json.JSONDecodeError, OSError) as e:
         logger.warning("Failed to read resume state: %s", e)

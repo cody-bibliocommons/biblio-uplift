@@ -11,6 +11,7 @@ class CleanupConfig(BaseModel):
     prune_build_cache: bool = True
     log_retention_days: int = 30
     log_paths: list[str] = Field(default_factory=list)
+    cleanup_commands: list[str] = Field(default_factory=list)
 
 
 class ProjectConfig(BaseModel):
@@ -32,6 +33,13 @@ class ProjectConfig(BaseModel):
             raise ValueError(f"compose_command contains invalid characters: {v}")
         return v
 
+    @field_validator("compose_files")
+    @classmethod
+    def validate_compose_files(cls, v: list[str]) -> list[str]:
+        if not v:
+            raise ValueError("compose_files must not be empty")
+        return v
+
     backup_dir: Path = Path("/var/backups/itops")
     backup_retention: int = Field(default=5, ge=1)
     volumes: list[str] = Field(default_factory=list)
@@ -39,6 +47,29 @@ class ProjectConfig(BaseModel):
 
     healthcheck_urls: list[str] = Field(default_factory=list)
     healthcheck_timeout: int = 120
+
+    @field_validator("healthcheck_urls")
+    @classmethod
+    def validate_healthcheck_urls(cls, v: list[str]) -> list[str]:
+        for url in v:
+            if not url.startswith(("http://", "https://")):
+                raise ValueError(f"healthcheck_urls entries must start with http:// or https://: {url}")
+        return v
+
+    @field_validator("backup_dir")
+    @classmethod
+    def validate_backup_dir(cls, v: Path) -> Path:
+        if not str(v).startswith("/"):
+            raise ValueError("backup_dir must be an absolute path")
+        return v
+
+    @field_validator("volumes")
+    @classmethod
+    def validate_volumes(cls, v: list[str]) -> list[str]:
+        for vol in v:
+            if not re.match(r"^[a-zA-Z0-9][a-zA-Z0-9_.-]*$", vol):
+                raise ValueError(f"Invalid volume name (use alphanumeric, hyphens, underscores, dots): {vol}")
+        return v
 
     skip_os_update: bool = False
     skip_reboot: bool = False

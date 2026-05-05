@@ -33,6 +33,22 @@ biblio-uplift run itops-vaultwarden --dry-run
 # Run cleanup (prune docker resources, old logs)
 biblio-uplift cleanup itops-vaultwarden
 
+# Check server status
+biblio-uplift status itops-vaultwarden
+
+# Restore from a backup
+biblio-uplift restore itops-vaultwarden
+biblio-uplift restore itops-vaultwarden --backup 20260501-030000
+
+# Resume an upgrade after reboot (if session was lost)
+biblio-uplift resume
+
+# Run upgrades on all projects sequentially
+biblio-uplift run-all --non-interactive
+
+# List available backups
+biblio-uplift backup list itops-vaultwarden
+
 # View history
 biblio-uplift history --last 10
 ```
@@ -70,6 +86,13 @@ biblio-uplift config show itops-vaultwarden
 | `healthcheck_timeout` | `120` | Seconds to wait for containers to become healthy |
 | `skip_os_update` | `false` | Skip OS package updates by default |
 | `skip_reboot` | `false` | Skip reboot by default |
+| `ssh_port` | `22` | SSH port |
+| `git_branch` | `main` | Git branch to pull |
+| `maintenance_window` | `null` | Allowed time window for runs (e.g. `"Sun 02:00-06:00"`) |
+| `on_failure_cmd` | `null` | Shell command to run on failure (e.g. Slack webhook) |
+| `on_success_cmd` | `null` | Shell command to run on success |
+| `reboot_timeout` | `300` | Seconds to wait for SSH after reboot |
+| `apt_timeout` | `600` | Seconds to wait for apt operations |
 | `pre_upgrade_hooks` | `[]` | Shell commands to run before upgrade (executed as root via sudo) |
 | `post_upgrade_hooks` | `[]` | Shell commands to run after upgrade |
 
@@ -112,28 +135,80 @@ On failure, completed steps are rolled back in reverse order (docker down → do
 1. **Docker cleanup** — Prune stopped containers, dangling images, unused volumes, build cache
 1. **Log cleanup** — Truncate configured log files, vacuum journald
 
+## TUI
+
+Running `biblio-uplift` with no command launches the interactive terminal UI. It has 8 panels:
+
+- **Dashboard** — Overview of all projects and their last run status
+- **Upgrade** — Run upgrades interactively with live step progress
+- **Cleanup** — Run cleanup pipelines with live output
+- **Server Status** — View remote server health (disk, memory, uptime, containers)
+- **Backups** — Browse and restore backups
+- **Config Editor** — View and edit project configurations
+- **History** — Browse past upgrade runs with filtering
+- **Tools** — Security audits, log rotation, container management tools
+
 ## CLI Flags
 
 ```
-biblio-uplift [--debug] COMMAND
+biblio-uplift [--debug] [--version] COMMAND
 
 Global:
   --debug              Write verbose logs to logs/debug.log
+  --version            Show version and exit
 
-run:
+run PROJECT:
   --non-interactive    Skip confirmation prompts
   --skip-reboot        Skip the reboot step
   --skip-os-update     Skip OS package updates
   --skip-backup        Skip all backup steps
+  --skip-git           Skip git pull
   --dry-run            Simulate without executing
   --no-hooks           Skip pre/post hooks
+  --on-failure TEXT    Shell command to run on failure (overrides config)
+  --start-from TEXT    Skip steps before this one (e.g. docker_pull)
 
-cleanup:
+cleanup PROJECT:
+  --non-interactive    Skip confirmation prompts
+  --dry-run            Show what would be done
+
+restore PROJECT:
+  --backup TEXT        Backup timestamp to restore (defaults to latest)
   --non-interactive    Skip confirmation prompts
 
+resume:
+  Resume an upgrade after reboot if the controlling session was lost.
+  No options.
+
+status PROJECT:
+  Show current status of a project's remote server.
+  No options.
+
+backup list PROJECT:
+  List available backups for a project.
+  No options.
+
+run-all:
+  --non-interactive    Skip confirmation prompts
+  --skip-reboot        Skip the reboot step
+  --skip-os-update     Skip OS package updates
+  --dry-run            Simulate without executing
+  --projects TEXT      Comma-separated project names (defaults to all)
+
+config:
+  config list          List all project configurations
+  config show PROJECT  Show configuration details for a project
+  config create NAME   Create a new project configuration
+    --host TEXT          SSH hostname (required)
+    --project-dir TEXT   Remote project directory (required)
+    --ssh-user TEXT      SSH username
+    --ssh-key TEXT       Path to SSH key
+  config validate PROJECT
+                       Validate config by testing SSH, Docker, and paths
+
 history:
-  --project NAME       Filter by project
-  --last N             Show last N entries (default: 20)
+  --project TEXT       Filter by project
+  --last INTEGER       Show last N entries (default: 20)
 ```
 
 ## Audit History

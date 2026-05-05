@@ -125,8 +125,8 @@ class TestBackupVolumesStep:
         assert "No volumes" in result.message
 
     def test_docker_run_fails(self, mock_ctx):
-        # First call is docker pull (ok), second is docker run (fail)
-        mock_ctx.ssh.run.side_effect = [ok(), fail(stderr="docker err")]
+        # First call is docker pull (ok), second is volume inspect (ok), third is docker run (fail)
+        mock_ctx.ssh.run.side_effect = [ok(), ok(), fail(stderr="docker err")]
         result = BackupVolumesStep().execute(mock_ctx)
         assert result.status == StepStatus.FAILED
         assert "Volume backup failed" in result.error
@@ -137,24 +137,25 @@ class TestBackupVolumesStep:
 
 class TestBackupCleanupStep:
     def test_finds_and_removes_old(self, mock_ctx):
-        # find returns 7 files, retention is 5 -> remove 2
+        # 7 backup sets (each with 1 file), retention is 5 -> remove 2 sets
         bdir = str(mock_ctx.config.backup_dir)
-        files = "\n".join(f"{bdir}/test-project_files_{i}.tar.gz" for i in range(7))
+        files = "\n".join(
+            f"{bdir}/test-project_files_2026050{i}_120000.tar.gz" for i in range(7)
+        )
         mock_ctx.ssh.run.side_effect = [
-            ok(stdout=files),  # find for files pattern
+            ok(stdout=files),  # ls for all tar.gz
             ok(),  # rm file 0
             ok(),  # rm file 1
-            ok(stdout=""),  # find for volume pattern (empty)
         ]
         result = BackupCleanupStep().execute(mock_ctx)
         assert result.status == StepStatus.SUCCESS
-        assert "removed 2" in result.message
+        assert "Removed 2 sets" in result.message
 
     def test_nothing_to_clean(self, mock_ctx):
         mock_ctx.ssh.run.return_value = ok(stdout="")
         result = BackupCleanupStep().execute(mock_ctx)
         assert result.status == StepStatus.SUCCESS
-        assert "removed 0" in result.message
+        assert "No backups to clean" in result.message
 
 
 # ── Docker Steps ──
@@ -231,6 +232,7 @@ class TestGitPullStep:
             ok(stdout="abc1234 initial commit"),  # git log
             ok(stdout="main"),  # git rev-parse branch
             ok(),  # git fetch
+            ok(stdout=""),  # git status --porcelain
             ok(),  # git reset
             ok(stdout="def5678 new commit"),  # git log after
             ok(stdout=" file.txt | 2 +-\n"),  # git diff --stat
@@ -256,6 +258,7 @@ class TestGitPullStep:
             ok(stdout="abc1234 initial commit"),  # git log
             ok(stdout="main"),  # git rev-parse (ignored due to override)
             ok(),  # git fetch
+            ok(stdout=""),  # git status --porcelain
             ok(),  # git reset
             ok(stdout="def5678 new commit"),  # git log after
             ok(stdout=""),  # git diff --stat (no changes)
@@ -263,7 +266,7 @@ class TestGitPullStep:
         result = GitPullStep().execute(mock_ctx)
         assert result.status == StepStatus.SUCCESS
         # Verify git reset used origin/develop
-        reset_call = mock_ctx.ssh.run.call_args_list[3]
+        reset_call = mock_ctx.ssh.run.call_args_list[4]
         assert "origin/develop" in reset_call.args[0]
 
     def test_rollback(self, mock_ctx):
@@ -271,8 +274,8 @@ class TestGitPullStep:
         mock_ctx.state["git_branch"] = "main"
         GitPullStep().rollback(mock_ctx)
         cmd = mock_ctx.ssh.run.call_args[0][0]
-        assert "git checkout" in cmd
-        assert "git reset --hard abc1234" in cmd
+        assert "checkout" in cmd
+        assert "reset --hard abc1234" in cmd
 
 
 # ── OsUpdateStep ──

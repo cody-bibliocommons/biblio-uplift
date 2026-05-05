@@ -46,7 +46,7 @@ class TestBuildSSHCmd:
         key = tmp_path / "k.pem"
         key.write_text("k")
         runner = SSHRunner(host="h", user="u", key_path=key, sudo=False)
-        cmd = runner._build_ssh_cmd("ls /root")
+        cmd = runner._build_ssh_cmd("ls /root", use_sudo=False)
         assert cmd[-1] == "ls /root"
 
 

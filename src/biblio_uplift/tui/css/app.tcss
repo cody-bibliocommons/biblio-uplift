@@ -296,3 +296,12 @@ ProgressBar > .bar--complete {
     layout: vertical;
     width: 1fr;
 }
+
+/* Toolbar button alignment - push down to align with Select */
+.toolbar-btn {
+    margin: 2 0 0 2;
+}
+
+.toolbar-chk {
+    margin: 2 0 0 2;
+}

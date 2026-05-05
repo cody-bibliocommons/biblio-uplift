@@ -120,6 +120,7 @@ class Pipeline:
 
         self.start_time = time.monotonic()
         success = True
+        failure_hook_fired = False
 
         try:
             for step in self.steps:
@@ -131,9 +132,11 @@ class Pipeline:
                         ctx.on_step_change(step)
                     continue
 
-                if ctx.dry_run and step.skippable:
+                if ctx.dry_run and not getattr(step, 'supports_dry_run', False):
                     step.status = StepStatus.SKIPPED
                     step.result = StepResult(status=StepStatus.SKIPPED, message="Dry run — skipped")
+                    if ctx.on_output:
+                        ctx.on_output(f"[DRY RUN] Skipping: {step.name} — {step.description}")
                     if ctx.on_step_change:
                         ctx.on_step_change(step)
                     logger.info("DRY RUN SKIP: %s", step.name)
@@ -179,6 +182,11 @@ class Pipeline:
                     # Rollback completed steps in reverse
                     if ctx.on_output:
                         ctx.on_output("Initiating rollback...")
+                    # Rollback the failed step itself (partial execution may need cleanup)
+                    try:
+                        step.rollback(ctx)
+                    except Exception as e:
+                        logger.warning("Rollback failed for %s: %s", step.name, e)
                     for completed in reversed(self.steps[: self.steps.index(step)]):
                         if completed.status == StepStatus.SUCCESS:
                             try:
@@ -187,12 +195,13 @@ class Pipeline:
                                 logger.warning("Rollback failed for %s: %s", completed.name, e)
                     # Fire failure notification
                     self._fire_failure_hook(ctx)
+                    failure_hook_fired = True
                     break
                 else:
                     logger.info("DONE: %s (%.1fs)", step.name, result.duration)
 
-            # Fire failure notification for cancellation (not already fired by FAILED block)
-            if not success and ctx.cancelled.is_set():
+            # Fire failure notification for cancellation (only if not already fired)
+            if not success and ctx.cancelled.is_set() and not failure_hook_fired:
                 self._fire_failure_hook(ctx)
         finally:
             self.end_time = time.monotonic()
@@ -211,17 +220,30 @@ class Pipeline:
         try:
             if ctx.on_output:
                 ctx.on_output(f"Running notification: {cmd}")
-            result = _subprocess.run(
+            proc = _subprocess.Popen(
                 cmd,
                 shell=True,
-                capture_output=True,
+                stdout=_subprocess.PIPE,
+                stderr=_subprocess.PIPE,
                 text=True,
-                timeout=30,  # nosec B602
+                start_new_session=True,  # nosec B602
             )
-            if result.returncode != 0:
-                logger.warning("Notification command failed: %s", result.stderr)
+            try:
+                stdout, stderr = proc.communicate(timeout=30)
+                if proc.returncode != 0:
+                    logger.warning("Notification command failed: %s", stderr)
+                    if ctx.on_output:
+                        ctx.on_output(f"Notification failed (exit {proc.returncode}): {stderr.strip()}")
+            except _subprocess.TimeoutExpired:
+                os.killpg(os.getpgid(proc.pid), 9)
+                proc.wait()
+                logger.warning("Notification command timed out: %s", cmd)
+                if ctx.on_output:
+                    ctx.on_output(f"Notification timed out: {cmd}")
         except Exception as e:
             logger.warning("Notification failed: %s", e)
+            if ctx.on_output:
+                ctx.on_output(f"Notification error: {e}")
 
     def get_summary(self) -> list[dict[str, Any]]:
         """Return a summary of all step results."""

@@ -44,4 +44,14 @@ cleanup:
   prune_containers: true
   prune_build_cache: true
   log_retention_days: 30
-  log_paths: []
+  log_paths:
+    - /var/log/syslog
+    - /var/log/auth.log
+    - /var/log/identity-freeipa-tar-cron.log
+  cleanup_commands:
+    - "docker exec freeipa01 truncate -s 0 /var/log/httpd/error_log"
+    - "docker exec freeipa01 truncate -s 0 /var/log/httpd/access_log"
+    - "docker exec freeipa01 truncate -s 0 /var/log/httpd/ssl_request_log"
+    - "docker exec freeipa01 truncate -s 0 /var/log/krb5kdc.log"
+    - "docker exec freeipa01 find /var/log/dirsrv -name 'access.*' -mtime +7 -delete"
+    - "docker exec freeipa01 find /var/log/dirsrv -name 'errors.*' -mtime +7 -delete"

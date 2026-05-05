@@ -25,24 +25,30 @@ logger = logging.getLogger(__name__)
 
 
 def setup_logging(debug: bool = False) -> None:
+    import uuid
     from logging.handlers import RotatingFileHandler
 
     from rich.logging import RichHandler
 
     from biblio_uplift.paths import get_project_root
 
+    session_id = uuid.uuid4().hex[:8]
     log_dir = get_project_root() / "logs"
     log_dir.mkdir(exist_ok=True)
 
     level = logging.DEBUG if debug else logging.INFO
+    file_fmt = f"%(asctime)s [{session_id}] %(levelname)s %(name)s: %(message)s"
+
+    file_handler = RotatingFileHandler(
+        log_dir / "upgrade.log",
+        maxBytes=10_000_000,
+        backupCount=5,
+    )
+    file_handler.setFormatter(logging.Formatter(file_fmt))
 
     handlers: list[logging.Handler] = [
         RichHandler(rich_tracebacks=True, show_path=False, level=logging.INFO),
-        RotatingFileHandler(
-            log_dir / "upgrade.log",
-            maxBytes=10_000_000,
-            backupCount=5,
-        ),
+        file_handler,
     ]
 
     if debug:
@@ -52,7 +58,7 @@ def setup_logging(debug: bool = False) -> None:
             backupCount=3,
         )
         debug_handler.setLevel(logging.DEBUG)
-        debug_handler.setFormatter(logging.Formatter("%(asctime)s %(name)s %(levelname)s %(message)s"))
+        debug_handler.setFormatter(logging.Formatter(file_fmt))
         handlers.append(debug_handler)
 
     logging.basicConfig(
@@ -60,6 +66,8 @@ def setup_logging(debug: bool = False) -> None:
         format="%(message)s",
         handlers=handlers,
     )
+
+    logger.info("Session %s started", session_id)
 
 
 def _load_project_config(project: str) -> ProjectConfig:
@@ -127,7 +135,7 @@ def cli(ctx: click.Context, debug: bool, version: bool) -> None:
     if ctx.invoked_subcommand is None:
         from biblio_uplift.tui.app import UpgradeApp
 
-        app = UpgradeApp()
+        app = UpgradeApp(debug=debug)
         app.run()
 
 
@@ -204,6 +212,14 @@ def run(
         steps=pipeline.get_summary(),
         success=success,
         duration=pipeline.duration,
+        dry_run=dry_run,
+        options={
+            "skip_reboot": "reboot" in skip_steps,
+            "skip_os_update": "os_update" in skip_steps,
+            "skip_backup": "backup_files" in skip_steps,
+            "skip_git": "git_pull" in skip_steps,
+            "no_hooks": "pre_hooks" in skip_steps,
+        },
     )
 
     from biblio_uplift.core.state import clear_resume_state
@@ -245,6 +261,7 @@ def cleanup(project: str, non_interactive: bool, dry_run: bool) -> None:
         steps=pipeline.get_summary(),
         success=success,
         duration=pipeline.duration,
+        dry_run=dry_run,
     )
 
     _print_summary(pipeline, success)
@@ -273,7 +290,8 @@ def restore(project, backup_ts, non_interactive):
         file_pattern = f"{config.name}_files_{backup_ts}.tar.gz"
     else:
         # Find latest file backup
-        result = ssh.run(f"ls -1t {backup_dir}/{shlex.quote(config.name)}_files_*.tar.gz 2>/dev/null | head -1")
+        inner = f"ls -1t {backup_dir}/{shlex.quote(config.name)}_files_*.tar.gz 2>/dev/null | head -1"
+        result = ssh.run(f"bash -c {shlex.quote(inner)}")
         if not result.ok or not result.stdout.strip():
             console.print("[red]No backups found.[/red]")
             raise SystemExit(1)
@@ -290,7 +308,8 @@ def restore(project, backup_ts, non_interactive):
         raise SystemExit(1)
 
     # List volume backups for this timestamp
-    vol_result = ssh.run(f"ls -1 {backup_dir}/*_{backup_ts}.tar.gz 2>/dev/null")
+    inner = f"ls -1 {backup_dir}/*_{backup_ts}.tar.gz 2>/dev/null"
+    vol_result = ssh.run(f"bash -c {shlex.quote(inner)}")
     vol_files = (
         [
             line.strip()
@@ -313,10 +332,14 @@ def restore(project, backup_ts, non_interactive):
 
     # Step 1: Stop services
     out("Stopping services...")
-    from biblio_uplift.core.steps.docker import _compose_cmd
+    from biblio_uplift.core.steps.docker import _bash_compose
 
-    down_cmd = _compose_cmd(config) + " down"
-    ssh.run(down_cmd, timeout=120, on_output=out)
+    down_cmd = _bash_compose(config, "down")
+    down_result = ssh.run(down_cmd, timeout=120, on_output=out)
+    if not down_result.ok:
+        console.print(f"[red]Failed to stop services (docker compose down failed): {down_result.stderr}[/red]")
+        console.print("[red]Aborting restore to prevent data corruption.[/red]")
+        raise SystemExit(1)
 
     # Step 2: Restore files
     out(f"Restoring files from {file_backup}...")
@@ -329,7 +352,7 @@ def restore(project, backup_ts, non_interactive):
     for vf in vol_files:
         vf_name = Path(vf).name
         # Extract volume name: everything before _TIMESTAMP.tar.gz
-        vol_name = vf_name.replace(f"_{backup_ts}.tar.gz", "")
+        vol_name = vf_name.removesuffix(f"_{backup_ts}.tar.gz")
         out(f"Restoring volume {vol_name}...")
         result = ssh.run(
             f"docker run --rm -v {shlex.quote(vol_name)}:/volume -v {shlex.quote(str(config.backup_dir))}:/backup "
@@ -342,7 +365,7 @@ def restore(project, backup_ts, non_interactive):
 
     # Step 4: Bring services back up
     out("Starting services...")
-    up_cmd = _compose_cmd(config) + " up -d"
+    up_cmd = _bash_compose(config, "up -d")
     ssh.run(up_cmd, timeout=120, on_output=out)
 
     console.print("[green]Restore complete.[/green]")
@@ -373,6 +396,11 @@ def resume():
     if not state_data:
         console.print("No resume state found. Nothing to resume.")
         raise SystemExit(0)
+
+    if "project" not in state_data or "completed_steps" not in state_data:
+        console.print("[red]Resume state is corrupted (missing required keys). Clearing.[/red]")
+        clear_resume_state()
+        raise SystemExit(1)
 
     project_name = state_data["project"]
     completed_steps = set(state_data.get("completed_steps", []))
@@ -628,15 +656,18 @@ def history(project: str | None, last: int) -> None:
     table.add_column("Project")
     table.add_column("Pipeline")
     table.add_column("Success")
+    table.add_column("Dry Run")
     table.add_column("Duration")
 
     for e in entries:
         success_str = "[green]✓[/green]" if e["success"] else "[red]✗[/red]"
+        dry_str = "Yes" if e.get("dry_run") else ""
         table.add_row(
             e["timestamp"],
             e["project"],
             e["pipeline"],
             success_str,
+            dry_str,
             f"{e['duration_seconds']}s",
         )
 
@@ -660,12 +691,12 @@ def status(project):
     console.print()
 
     # Uptime
-    r = ssh.run("uptime -p")
+    r = ssh.run("uptime -p", sudo=False)
     if r.ok:
         console.print(f"  Uptime: {r.stdout.strip()}")
 
     # Reboot required?
-    r = ssh.run("cat /var/run/reboot-required 2>/dev/null || echo 'No reboot required'")
+    r = ssh.run("cat /var/run/reboot-required 2>/dev/null || echo 'No reboot required'", sudo=False)
     if r.ok:
         msg = r.stdout.strip()
         if "restart required" in msg.lower():
@@ -679,15 +710,16 @@ def status(project):
         console.print(f"  Disk: {r.stdout.strip()}")
 
     # Git
-    r = ssh.run(f"cd {shlex.quote(str(config.project_dir))} && git log --oneline -1")
+    dir_q = shlex.quote(str(config.project_dir))
+    r = ssh.run(f"bash -c 'cd {dir_q} && git -c safe.directory={dir_q} log --oneline -1'", sudo=False)
     if r.ok:
         console.print(f"  Git: {r.stdout.strip()}")
 
     # Containers
     console.print()
-    from biblio_uplift.core.steps.docker import _compose_cmd
+    from biblio_uplift.core.steps.docker import _bash_compose
 
-    r = ssh.run(f"{_compose_cmd(config)} ps --format 'table {{{{.Name}}}}\t{{{{.Status}}}}\t{{{{.Image}}}}'")
+    r = ssh.run(_bash_compose(config, "ps --format 'table {{{{.Name}}}}\t{{{{.Status}}}}\t{{{{.Image}}}}'"))
     if r.ok and r.stdout.strip():
         console.print("  Containers:")
         for line in r.stdout.strip().splitlines():
@@ -696,7 +728,8 @@ def status(project):
         console.print("  Containers: [yellow]none running[/yellow]")
 
     # Backup info
-    r = ssh.run(f"ls -1t {shlex.quote(str(config.backup_dir))}/*.tar.gz 2>/dev/null | head -5")
+    inner = f"ls -1t {shlex.quote(str(config.backup_dir))}/*.tar.gz 2>/dev/null | head -5"
+    r = ssh.run(f"bash -c {shlex.quote(inner)}")
     if r.ok and r.stdout.strip():
         console.print()
         console.print("  Recent backups:")
@@ -725,7 +758,8 @@ def backup_list(project):
         port=config.ssh_port,
     )
 
-    result = ssh.run(f"ls -lhS {shlex.quote(str(config.backup_dir))}/*.tar.gz 2>/dev/null")
+    inner = f"ls -lhS {shlex.quote(str(config.backup_dir))}/*.tar.gz 2>/dev/null"
+    result = ssh.run(f"bash -c {shlex.quote(inner)}")
     if not result.ok or not result.stdout.strip():
         console.print("No backups found.")
         return
@@ -744,3 +778,62 @@ def backup_list(project):
             table.add_row(name, size, date)
 
     console.print(table)
+
+
+@backup.command("prune")
+@click.argument("project")
+@click.option("--keep", default=None, type=int, help="Number of backup sets to keep (overrides config)")
+@click.option("--non-interactive", is_flag=True)
+def backup_prune(project, keep, non_interactive):
+    """Remove old backup sets beyond retention count."""
+    import re
+
+    config = _load_project_config(project)
+    retention = keep if keep is not None else config.backup_retention
+    ssh = SSHRunner(host=config.ssh_host, user=config.ssh_user, key_path=config.ssh_key, sudo=config.sudo, port=config.ssh_port)
+
+    backup_dir = str(config.backup_dir)
+    console.print(f"Pruning backups for [bold]{config.name}[/bold] (keeping {retention} sets)")
+
+    # List all backups
+    inner = f"ls -1 {shlex.quote(backup_dir)}/*.tar.gz 2>/dev/null"
+    result = ssh.run(f"bash -c {shlex.quote(inner)}")
+    if not result.ok or not result.stdout.strip():
+        console.print("No backups found.")
+        return
+
+    files = [f.strip() for f in result.stdout.strip().splitlines() if f.strip()]
+
+    # Extract timestamps and group
+    ts_pattern = re.compile(r'_(\d{8}_\d{6})\.tar\.gz$')
+    groups: dict[str, list[str]] = {}
+    for f in files:
+        match = ts_pattern.search(f)
+        if match:
+            ts = match.group(1)
+            groups.setdefault(ts, []).append(f)
+
+    sorted_ts = sorted(groups.keys(), reverse=True)
+    console.print(f"Found {len(sorted_ts)} backup sets ({len(files)} files)")
+
+    if len(sorted_ts) <= retention:
+        console.print(f"Nothing to prune ({len(sorted_ts)} sets <= {retention})")
+        return
+
+    to_remove_ts = sorted_ts[retention:]
+    to_remove_files = [f for ts in to_remove_ts for f in groups[ts]]
+    console.print(f"Will remove {len(to_remove_ts)} old backup sets ({len(to_remove_files)} files):")
+    for ts in to_remove_ts:
+        console.print(f"  Set {ts}: {len(groups[ts])} files")
+
+    if not non_interactive:
+        click.confirm(f"Remove {len(to_remove_ts)} backup sets ({len(to_remove_files)} files)?", abort=True)
+
+    for f in to_remove_files:
+        r = ssh.run(f"rm -f {shlex.quote(f)}")
+        if r.ok:
+            console.print(f"  Removed: {Path(f).name}")
+        else:
+            console.print(f"  [red]Failed: {Path(f).name}: {r.stderr}[/red]")
+
+    console.print("[green]Prune complete.[/green]")

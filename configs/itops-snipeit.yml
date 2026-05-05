@@ -38,4 +38,6 @@ cleanup:
   prune_containers: true
   prune_build_cache: true
   log_retention_days: 30
-  log_paths: []
+  log_paths:
+    - /var/log/syslog
+    - /var/log/auth.log

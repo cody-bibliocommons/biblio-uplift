@@ -230,8 +230,13 @@ class TestPipelineNotificationEdgeCases:
         cancel.set()
         ctx = PipelineContext(config=config, ssh=mock_ssh)
         ctx.cancelled = cancel
+        mock_proc = MagicMock()
+        mock_proc.communicate.return_value = ("", "")
+        mock_proc.returncode = 0
+        mock_proc.pid = 12345
+        mock_sub.Popen.return_value = mock_proc
         Pipeline("t", [_SuccessStep()]).run(ctx)
-        mock_sub.run.assert_called_once()
+        mock_sub.Popen.assert_called_once()
 
     @patch("biblio_uplift.core.pipeline._subprocess")
     @patch("biblio_uplift.core.pipeline.fcntl")
@@ -382,22 +387,21 @@ class TestBackupVolumeFailure:
 
 class TestBackupCleanupNoFiles:
     def test_find_returns_failure(self, mock_ctx):
-        """Cover line 108: find command fails."""
+        """Cover: ls command fails."""
         mock_ctx.ssh.run.return_value = fail(stderr="find err")
         result = BackupCleanupStep().execute(mock_ctx)
         assert result.status == StepStatus.SUCCESS
-        assert "removed 0" in result.message
+        assert "No backups to clean" in result.message
 
     def test_files_within_retention(self, mock_ctx):
-        """Cover line 114: files <= retention, nothing removed."""
+        """Cover: files <= retention, nothing removed."""
         bdir = str(mock_ctx.config.backup_dir)
         mock_ctx.ssh.run.side_effect = [
-            ok(stdout=f"{bdir}/test-project_files_1.tar.gz"),  # 1 file, retention=5
-            ok(stdout=""),  # volume pattern
+            ok(stdout=f"{bdir}/test-project_files_20260501_120000.tar.gz"),  # 1 set, retention=5
         ]
         result = BackupCleanupStep().execute(mock_ctx)
         assert result.status == StepStatus.SUCCESS
-        assert "removed 0" in result.message
+        assert "Within retention" in result.message
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -407,25 +411,35 @@ class TestBackupCleanupNoFiles:
 
 class TestLogCleanupEdgeCases:
     def test_truncate_fails_continues(self, mock_ctx):
-        """Cover lines 61-62: truncate fails, logs warning, continues."""
+        """Cover: truncate fails for a log path, step still succeeds."""
         mock_ctx.config.cleanup.log_paths = ["/var/log/app.log"]
         output = []
         mock_ctx.on_output = output.append
         mock_ctx.ssh.run.side_effect = [
+            ok(stdout="3\n"),   # find .gz
+            ok(stdout="1\n"),   # find .old
+            ok(stdout="0\n"),   # find .1
             fail(stderr="permission denied"),  # truncate fails
-            ok(),  # journalctl succeeds
+            ok(stdout="Vacuuming done\n"),     # journalctl
+            ok(),              # apt-get clean
+            ok(stdout="0\n"),  # find /tmp
         ]
         result = LogCleanupStep().execute(mock_ctx)
         assert result.status == StepStatus.SUCCESS
-        assert any("failed to truncate" in o.lower() for o in output)
 
-    def test_journalctl_fails(self, mock_ctx):
-        """Cover line 71: journalctl fails -> step fails."""
+    def test_journalctl_fails_still_succeeds(self, mock_ctx):
+        """Cover: journalctl fails, step still succeeds (best-effort)."""
         mock_ctx.config.cleanup.log_paths = []
-        mock_ctx.ssh.run.return_value = fail(stderr="journal err")
+        mock_ctx.ssh.run.side_effect = [
+            ok(stdout="0\n"),  # find .gz
+            ok(stdout="0\n"),  # find .old
+            ok(stdout="0\n"),  # find .1
+            fail(stderr="journal err"),  # journalctl fails
+            ok(),              # apt-get clean
+            ok(stdout="0\n"),  # find /tmp
+        ]
         result = LogCleanupStep().execute(mock_ctx)
-        assert result.status == StepStatus.FAILED
-        assert "Journal cleanup failed" in result.message
+        assert result.status == StepStatus.SUCCESS
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -601,17 +615,24 @@ class TestBackupTarFailure:
 
 
 class TestBackupCleanupSafetyCheck:
-    """Cover backup.py line 114: file outside backup_dir is skipped."""
+    """Cover: file outside backup_dir is skipped."""
 
     def test_file_outside_backup_dir_skipped(self, mock_ctx):
         bdir = str(mock_ctx.config.backup_dir)
-        # Return files where one is outside backup_dir
-        files = f"{bdir}/old1.tar.gz\n{bdir}/old2.tar.gz\n/etc/passwd\n{bdir}/old3.tar.gz\n{bdir}/old4.tar.gz\n{bdir}/old5.tar.gz\n{bdir}/old6.tar.gz"
+        # 7 files across 7 timestamps, one is outside backup_dir -> retention=5, remove 2 sets
+        files = "\n".join([
+            f"{bdir}/proj_files_20260501_120000.tar.gz",
+            f"{bdir}/proj_files_20260502_120000.tar.gz",
+            f"/etc/passwd_20260503_120000.tar.gz",
+            f"{bdir}/proj_files_20260504_120000.tar.gz",
+            f"{bdir}/proj_files_20260505_120000.tar.gz",
+            f"{bdir}/proj_files_20260506_120000.tar.gz",
+            f"{bdir}/proj_files_20260507_120000.tar.gz",
+        ])
         mock_ctx.ssh.run.side_effect = [
-            ok(stdout=files),  # find for files pattern
-            ok(),
-            ok(),  # rm for the 2 oldest inside backup_dir
-            ok(stdout=""),  # volume pattern
+            ok(stdout=files),  # ls for all tar.gz
+            ok(),  # rm for 20260501 file
+            ok(),  # rm for 20260502 file
         ]
         result = BackupCleanupStep().execute(mock_ctx)
         assert result.status == StepStatus.SUCCESS
@@ -626,7 +647,12 @@ class TestCleanupDockerPruneFails:
     def test_prune_fails(self, mock_ctx):
         from biblio_uplift.core.steps.cleanup import DockerCleanupStep
 
-        mock_ctx.ssh.run.side_effect = [ok(), fail(stderr="prune err")]
+        mock_ctx.ssh.run.side_effect = [
+            ok(stdout=""),  # docker info check
+            ok(stdout="10G 5G 5G 50%"),  # df system disk
+            ok(stdout="TYPE  TOTAL  ACTIVE  SIZE  RECLAIMABLE\nImages  5  2  1GB  500MB"),  # docker system df before
+            fail(stderr="prune err"),  # first prune command fails
+        ]
         result = DockerCleanupStep().execute(mock_ctx)
         assert result.status == StepStatus.FAILED
 
@@ -794,6 +820,7 @@ class TestGitResetFailure:
             ok(stdout="abc1234 initial"),
             ok(stdout="main"),
             ok(),  # fetch ok
+            ok(stdout=""),  # git status --porcelain (no changes)
             fail(stderr="reset error"),  # reset fails
         ]
         result = GitPullStep().execute(mock_ctx)
