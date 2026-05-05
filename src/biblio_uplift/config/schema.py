@@ -44,6 +44,9 @@ class ProjectConfig(BaseModel):
     backup_retention: int = Field(default=5, ge=1)
     volumes: list[str] = Field(default_factory=list)
     extra_backup_paths: list[str] = Field(default_factory=list)
+    backup_exclude_patterns: list[str] = Field(
+        default_factory=lambda: [".env", ".env.*", ".secrets", "*.pem", "*.key", "**/certs/**", "**/ssl/**"]
+    )
 
     healthcheck_urls: list[str] = Field(default_factory=list)
     healthcheck_timeout: int = 120

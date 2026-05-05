@@ -12,11 +12,8 @@ volumes:
   - vaultwarden_data
   - vaultwarden_vault
 extra_backup_paths:
-  - /opt/docker/itops-vaultwarden/.env
-  - /opt/docker/itops-vaultwarden/.secrets
   - /opt/docker/itops-vaultwarden/haproxy
   - /opt/docker/itops-vaultwarden/mariadb
-  - /opt/docker/itops-vaultwarden/ssl
 healthcheck_urls:
   - https://ops-liv-vaultwarden01.bcommons.net
 healthcheck_timeout: 120

@@ -41,6 +41,7 @@ class ToolsPanel(Widget):
             yield Button("Run", id="btn-run-tool", variant="success", classes="toolbar-btn")
         with Horizontal(id="tools-body"):
             tree: Tree[str] = Tree("Tools", id="tools-tree")
+            tree.show_root = False
             tree.root.expand()
             # Group tools by category
             tools = get_all_tools()
@@ -64,7 +65,7 @@ class ToolsPanel(Widget):
                 log.write(f"[bold]{tool.name}[/bold]")
                 log.write(f"{tool.description}")
                 log.write(f"Category: {tool.category}")
-                log.write(f"Read-only: {'Yes' if tool.read_only else 'No (requires confirmation)'}")
+                log.write(f"Read-only: {'[green]Yes[/green]' if tool.read_only else '[bold red]No[/bold red] (modifies system)'}")
                 log.write("")
                 log.write("Select a project and click Run.")
             except Exception:

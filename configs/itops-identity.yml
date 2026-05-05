@@ -12,12 +12,9 @@ backup_retention: 5
 volumes:
   - ops-liv-identity01-pgdata
   - ops-liv-identity01-freeipa-data
-  - ops-liv-identity01-aws-secrets
   - ops-liv-identity01-fluent-bit-data
   - ops-liv-identity01-ssl
 extra_backup_paths:
-  - /opt/docker/itops-identity/.env
-  - /opt/docker/itops-identity/certs
   - /opt/docker/itops-identity/haproxy
   - /opt/docker/itops-identity/keepalived
   - /opt/docker/itops-identity/fluent-bit

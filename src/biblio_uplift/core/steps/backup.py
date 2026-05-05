@@ -35,7 +35,11 @@ class BackupFilesStep(PipelineStep):
         for p in cfg.extra_backup_paths:
             paths.append(p.lstrip("/"))
 
-        tar_cmd = f"tar czf {shlex.quote(archive)} -C / {' '.join(shlex.quote(p) for p in paths)}"
+        excludes = ""
+        for pattern in cfg.backup_exclude_patterns:
+            excludes += f" --exclude={shlex.quote(pattern)}"
+
+        tar_cmd = f"tar czf {shlex.quote(archive)}{excludes} -C / {' '.join(shlex.quote(p) for p in paths)}"
         ctx.on_output and ctx.on_output(f"Archiving files: {tar_cmd}")
         result = ctx.ssh.run(tar_cmd, timeout=600, on_output=ctx.on_output)
         if not result.ok:

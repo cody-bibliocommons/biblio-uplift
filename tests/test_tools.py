@@ -16,16 +16,19 @@ def _mock_config():
     config.compose_command = "docker compose"
     config.compose_files = ["docker-compose.yml"]
     config.compose_profile = None
+    config.healthcheck_urls = ["https://example.com/health"]
     return config
 
 
 def test_get_all_tools():
     tools = get_all_tools()
-    assert len(tools) == 9
+    assert len(tools) == 16
     names = [t.name for t in tools]
     assert "pending-security-updates" in names
     assert "journald-config" in names
     assert "container-logs" in names
+    assert "dns-resolution" in names
+    assert "sudo-users" in names
 
 
 def test_tool_categories():
@@ -34,14 +37,16 @@ def test_tool_categories():
     assert "security" in categories
     assert "system" in categories
     assert "docker" in categories
+    assert "Network" in categories
+    assert "Users & Access" in categories
 
 
 def test_read_only_tools():
     tools = get_all_tools()
     read_only = [t for t in tools if t.read_only]
     mutating = [t for t in tools if not t.read_only]
-    assert len(read_only) == 5  # 3 security + container-logs + compose-pull-check
-    assert len(mutating) == 4  # journald, logrotate, fix-permissions, restart
+    assert len(read_only) == 11  # 3 security + container-logs + compose-pull-check + 3 network + 3 users
+    assert len(mutating) == 5  # journald, logrotate, fix-permissions, restart, freeipa-logs
 
 
 def test_tool_execute_with_mock_ssh():
