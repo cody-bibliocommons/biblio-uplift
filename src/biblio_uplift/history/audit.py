@@ -29,6 +29,8 @@ def record_run(
     success: bool,
     duration: float,
     user: str | None = None,
+    dry_run: bool = False,
+    options: dict[str, Any] | None = None,
 ) -> None:
     """Append a run record to the history file."""
     entry = {
@@ -37,6 +39,8 @@ def record_run(
         "pipeline": pipeline,
         "user": user or os.environ.get("USER", "unknown"),
         "success": success,
+        "dry_run": dry_run,
+        "options": options or {},
         "duration_seconds": round(duration, 1),
         "steps": steps,
     }
@@ -45,6 +49,8 @@ def record_run(
     with open(path, "a") as f:
         fcntl.flock(f, fcntl.LOCK_EX)
         f.write(json.dumps(entry) + "\n")
+        f.flush()
+        os.fsync(f.fileno())
         fcntl.flock(f, fcntl.LOCK_UN)
 
     logger.info("Recorded run for %s in %s", project, path)

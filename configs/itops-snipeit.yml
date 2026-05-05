@@ -12,10 +12,8 @@ volumes:
   - snipeit01_mariadb-data
   - snipeit01_snipeit-data
 extra_backup_paths:
-  - /opt/docker/itops-snipeit/.env
   - /opt/docker/itops-snipeit/haproxy
   - /opt/docker/itops-snipeit/mariadb
-  - /opt/docker/itops-snipeit/ssl
 healthcheck_urls:
   - https://ops-liv-ast01.bcommons.net
 healthcheck_timeout: 120
@@ -38,4 +36,6 @@ cleanup:
   prune_containers: true
   prune_build_cache: true
   log_retention_days: 30
-  log_paths: []
+  log_paths:
+    - /var/log/syslog
+    - /var/log/auth.log

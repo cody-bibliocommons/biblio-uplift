@@ -52,9 +52,9 @@ class SSHRunner:
         self.connect_timeout = connect_timeout
         self.port = port
 
-    def _build_ssh_cmd(self, command: str) -> list[str]:
+    def _build_ssh_cmd(self, command: str, use_sudo: bool = True) -> list[str]:
         """Build the ssh command list."""
-        remote_cmd = f"sudo {command}" if self.sudo else command
+        remote_cmd = f"sudo {command}" if use_sudo else command
         return [
             "ssh",
             "-i",
@@ -77,6 +77,7 @@ class SSHRunner:
         timeout: int = 300,
         on_output: Callable[[str], None] | None = None,
         cancel_event: threading.Event | None = None,
+        sudo: bool | None = None,
     ) -> SSHResult:
         """Run a command on the remote host.
 
@@ -85,9 +86,11 @@ class SSHRunner:
             timeout: Max seconds to wait.
             on_output: Optional callback for real-time stdout lines (for TUI log panel).
             cancel_event: Optional threading.Event; if set, the command is terminated.
+            sudo: Override instance sudo setting. None=use self.sudo, True/False=override.
         """
         cancel_event = self.cancel_event or cancel_event
-        ssh_cmd = self._build_ssh_cmd(command)
+        use_sudo = self.sudo if sudo is None else sudo
+        ssh_cmd = self._build_ssh_cmd(command, use_sudo=use_sudo)
         logger.debug("SSH: %s", " ".join(ssh_cmd))
 
         start = time.monotonic()
@@ -145,7 +148,9 @@ class SSHRunner:
                     break
 
             proc.wait(timeout=timeout)
-            stderr_thread.join(timeout=5)
+            stderr_thread.join(timeout=10)
+            if stderr_thread.is_alive():
+                logger.warning("stderr reader thread did not finish in time")
 
         except subprocess.TimeoutExpired:
             proc.kill()

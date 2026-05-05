@@ -1,0 +1,44 @@
+name: itops-identity02
+ssh_host: ops-liv-identity02.bcommons.net
+ssh_user: ansible
+ssh_key: ~/.ssh/integration.pem
+sudo: true
+project_dir: /opt/docker/itops-identity
+compose_files:
+  - compose.yml
+compose_profile: hostname
+backup_dir: /var/backups/itops/itops-identity02
+backup_retention: 5
+volumes:
+  - ops-liv-identity02-pgdata
+  - ops-liv-identity02-freeipa-data
+  - ops-liv-identity02-fluent-bit-data
+  - ops-liv-identity02-ssl
+extra_backup_paths:
+  - /opt/docker/itops-identity/haproxy
+  - /opt/docker/itops-identity/keepalived
+  - /opt/docker/itops-identity/fluent-bit
+  - /opt/docker/itops-identity/freeipa
+healthcheck_urls:
+  - https://ops-liv-identity02.bcommons.net
+healthcheck_timeout: 180
+skip_os_update: false
+skip_reboot: false
+pre_upgrade_hooks: []
+post_upgrade_hooks: []
+cleanup:
+  prune_images: true
+  prune_volumes: false
+  prune_containers: true
+  prune_build_cache: true
+  log_retention_days: 30
+  log_paths:
+    - /var/log/syslog
+    - /var/log/auth.log
+  cleanup_commands:
+    - "docker exec freeipa02 truncate -s 0 /var/log/httpd/error_log"
+    - "docker exec freeipa02 truncate -s 0 /var/log/httpd/access_log"
+    - "docker exec freeipa02 truncate -s 0 /var/log/httpd/ssl_request_log"
+    - "docker exec freeipa02 truncate -s 0 /var/log/krb5kdc.log"
+    - "docker exec freeipa02 find /var/log/dirsrv -name 'access.*' -mtime +7 -delete"
+    - "docker exec freeipa02 find /var/log/dirsrv -name 'errors.*' -mtime +7 -delete"

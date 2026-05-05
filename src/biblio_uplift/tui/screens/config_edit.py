@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 
+from textual import on
 from textual.app import ComposeResult
 from textual.containers import Horizontal, VerticalScroll
 from textual.widget import Widget
@@ -29,16 +30,20 @@ logger = logging.getLogger(__name__)
 
 class ConfigPanel(Widget):
     DEFAULT_CSS = """
-    ConfigPanel { width: 1fr; height: 1fr; padding: 1; layout: vertical; }
+    ConfigPanel { width: 1fr; height: 1fr; layout: vertical; }
     #config-title { text-style: bold; color: $primary; padding: 0 0 1 0; }
+    #config-controls { height: auto; }
+    #config-controls Select { width: 30; }
     #config-form { height: 1fr; }
     ConfigPanel Input { margin: 0 0 1 0; }
     ConfigPanel Label { margin: 1 0 0 0; text-style: bold; }
     ConfigPanel Switch { margin: 0 0 0 1; }
     ConfigPanel TextArea { height: 4; margin: 0 0 1 0; }
     ConfigPanel Collapsible { margin: 1 0; border: solid $primary-darken-2; }
-    #cfg-name-input { margin: 0 0 1 0; }
     .form-section { text-style: bold; color: $warning; margin: 1 0 0 0; border-bottom: solid $primary-darken-2; padding: 0 0 1 0; }
+    .switch-row { height: auto; align: left middle; }
+    .switch-row Label { width: 20; margin: 0; }
+    .switch-row Switch { margin: 0; }
     """
 
     def __init__(self, **kwargs):
@@ -50,12 +55,12 @@ class ConfigPanel(Widget):
         yield Static("Configuration Editor", id="config-title")
         configs = list_configs(get_config_dir())
         options = [(cfg.name, cfg.name) for cfg in configs]
-        with Horizontal():
+        with Horizontal(id="config-controls"):
             yield Select(options, id="config-select", prompt="Select project")
-            yield Button("Load", id="btn-load-config", variant="primary")
-            yield Button("New", id="btn-new-config", variant="warning")
-            yield Button("Save", id="btn-save-config", variant="success", disabled=True)
-            yield Button("Delete", id="btn-delete-config", variant="error", disabled=True)
+            yield Button("Load", id="btn-load-config", variant="primary", classes="toolbar-btn")
+            yield Button("New", id="btn-new-config", variant="warning", classes="toolbar-btn")
+            yield Button("Save", id="btn-save-config", variant="success", disabled=True, classes="toolbar-btn")
+            yield Button("Delete", id="btn-delete-config", variant="error", disabled=True, classes="toolbar-btn")
 
         with VerticalScroll(id="config-form"):
             # -- Core --
@@ -93,13 +98,13 @@ class ConfigPanel(Widget):
 
             # -- Toggles --
             yield Static("Default Behavior", classes="form-section")
-            with Horizontal():
+            with Horizontal(classes="switch-row"):
                 yield Label("Sudo")
                 yield Switch(id="cfg-sudo", value=True)
-            with Horizontal():
+            with Horizontal(classes="switch-row"):
                 yield Label("Skip OS Update")
                 yield Switch(id="cfg-skip_os_update")
-            with Horizontal():
+            with Horizontal(classes="switch-row"):
                 yield Label("Skip Reboot")
                 yield Switch(id="cfg-skip_reboot")
 
@@ -133,16 +138,16 @@ class ConfigPanel(Widget):
 
             # -- Cleanup (collapsible) --
             with Collapsible(title="Cleanup Settings", collapsed=True):
-                with Horizontal():
+                with Horizontal(classes="switch-row"):
                     yield Label("Prune Images")
                     yield Switch(id="cfg-prune_images", value=True)
-                with Horizontal():
+                with Horizontal(classes="switch-row"):
                     yield Label("Prune Containers")
                     yield Switch(id="cfg-prune_containers", value=True)
-                with Horizontal():
+                with Horizontal(classes="switch-row"):
                     yield Label("Prune Volumes")
                     yield Switch(id="cfg-prune_volumes")
-                with Horizontal():
+                with Horizontal(classes="switch-row"):
                     yield Label("Prune Build Cache")
                     yield Switch(id="cfg-prune_build_cache", value=True)
                 yield Label("Log Retention (days)")
@@ -150,19 +155,29 @@ class ConfigPanel(Widget):
                 yield Label("Log Paths to Truncate (comma-separated)")
                 yield Input(id="cfg-log_paths", placeholder="/var/log/app.log")
 
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "btn-load-config":
-            select = self.query_one("#config-select", Select)
-            if select.value == Select.BLANK:
-                self.app.notify("Select a project", severity="warning")
-                return
-            self._load_config(str(select.value))
-        elif event.button.id == "btn-new-config":
-            self._new_config()
-        elif event.button.id == "btn-save-config":
-            self._save_config()
-        elif event.button.id == "btn-delete-config":
-            self._delete_config()
+    @on(Button.Pressed, "#btn-load-config")
+    def handle_load(self, event: Button.Pressed) -> None:
+        logger.debug("handle_load fired")
+        select = self.query_one("#config-select", Select)
+        if select.value == Select.NULL:
+            self.app.notify("Select a project", severity="warning")
+            return
+        self._load_config(str(select.value))
+
+    @on(Button.Pressed, "#btn-new-config")
+    def handle_new(self, event: Button.Pressed) -> None:
+        logger.debug("handle_new fired")
+        self._new_config()
+
+    @on(Button.Pressed, "#btn-save-config")
+    def handle_save(self, event: Button.Pressed) -> None:
+        logger.debug("handle_save fired")
+        self._save_config()
+
+    @on(Button.Pressed, "#btn-delete-config")
+    def handle_delete(self, event: Button.Pressed) -> None:
+        logger.debug("handle_delete fired")
+        self._delete_config()
 
     def _new_config(self) -> None:
         """Clear form for a new config."""
@@ -342,6 +357,7 @@ class ConfigPanel(Widget):
             # Refresh the select dropdown
             self._refresh_select()
             self.app.notify(f"Saved {config.name}", severity="information")
+            logger.info("Config saved: %s", config.name)
         except Exception as e:
             self.app.notify(f"Error: {e}", severity="error")
 

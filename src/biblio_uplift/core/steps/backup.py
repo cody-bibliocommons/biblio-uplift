@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import shlex
 from datetime import datetime, timezone
 
@@ -34,7 +35,11 @@ class BackupFilesStep(PipelineStep):
         for p in cfg.extra_backup_paths:
             paths.append(p.lstrip("/"))
 
-        tar_cmd = f"tar czf {shlex.quote(archive)} -C / {' '.join(shlex.quote(p) for p in paths)}"
+        excludes = ""
+        for pattern in cfg.backup_exclude_patterns:
+            excludes += f" --exclude={shlex.quote(pattern)}"
+
+        tar_cmd = f"tar czf {shlex.quote(archive)}{excludes} -C / {' '.join(shlex.quote(p) for p in paths)}"
         ctx.on_output and ctx.on_output(f"Archiving files: {tar_cmd}")
         result = ctx.ssh.run(tar_cmd, timeout=600, on_output=ctx.on_output)
         if not result.ok:
@@ -63,6 +68,13 @@ class BackupVolumesStep(PipelineStep):
 
         backup_paths: list[str] = []
         for vol in cfg.volumes:
+            # Verify volume exists before backing up
+            check = ctx.ssh.run(f"docker volume inspect {shlex.quote(vol)}", timeout=30)
+            if not check.ok:
+                return StepResult(
+                    status=StepStatus.FAILED,
+                    error=f"Volume does not exist: {vol}",
+                )
             safe_vol = vol.replace("/", "_").replace(" ", "_")
             archive = f"{safe_vol}_{timestamp}.tar.gz"
             cmd = (
@@ -83,37 +95,51 @@ class BackupVolumesStep(PipelineStep):
 class BackupCleanupStep(PipelineStep):
     name = "backup_cleanup"
     description = "Remove old backups beyond retention count"
+    skippable = True
 
     def execute(self, ctx: PipelineContext) -> StepResult:
-        cfg = ctx.config
-        backup_dir = str(cfg.backup_dir)
-        retention = cfg.backup_retention
+        config = ctx.config
+        out = ctx.on_output or (lambda x: None)
+        backup_dir = str(config.backup_dir)
+        retention = config.backup_retention
 
-        patterns = [f"{cfg.name}_files_*.tar.gz"]
-        for vol in cfg.volumes:
-            safe_vol = vol.replace("/", "_").replace(" ", "_")
-            patterns.append(f"{safe_vol}_*.tar.gz")
+        out(f"Checking backups in {backup_dir} (retention: {retention})...")
 
-        removed = 0
-        for pattern in patterns:
-            # List matching files sorted by name
-            result = ctx.ssh.run(
-                f"find {shlex.quote(backup_dir)} -maxdepth 1 -name {shlex.quote(pattern)} -type f | sort"
-            )
-            if not result.ok or not result.stdout.strip():
-                continue
+        # List all tar.gz files
+        inner = f"ls -1 {shlex.quote(backup_dir)}/*.tar.gz 2>/dev/null"
+        result = ctx.ssh.run(f"bash -c {shlex.quote(inner)}")
+        if not result.ok or not result.stdout.strip():
+            out("No backups found.")
+            return StepResult(status=StepStatus.SUCCESS, message="No backups to clean")
 
-            files = [f for f in result.stdout.strip().splitlines() if f]
-            if len(files) <= retention:
-                continue
+        files = [f.strip() for f in result.stdout.strip().splitlines() if f.strip()]
 
-            to_remove = files[: len(files) - retention]
-            for f in to_remove:
-                # Safety: only remove files within backup_dir
+        # Extract timestamps and group files by timestamp
+        ts_pattern = re.compile(r'_(\d{8}_\d{6})\.tar\.gz$')
+        groups: dict[str, list[str]] = {}
+        for f in files:
+            match = ts_pattern.search(f)
+            if match:
+                ts = match.group(1)
+                groups.setdefault(ts, []).append(f)
+
+        # Sort timestamps newest first
+        sorted_ts = sorted(groups.keys(), reverse=True)
+        out(f"Found {len(sorted_ts)} backup sets ({len(files)} files)")
+
+        if len(sorted_ts) <= retention:
+            out(f"Nothing to prune ({len(sorted_ts)} sets <= {retention})")
+            return StepResult(status=StepStatus.SUCCESS, message="Within retention")
+
+        # Remove old sets
+        to_remove_ts = sorted_ts[retention:]
+        remove_count = 0
+        for ts in to_remove_ts:
+            for f in groups[ts]:
                 if not f.startswith(backup_dir + "/"):
-                    continue
-                ctx.on_output and ctx.on_output(f"Removing old backup: {f}")
-                ctx.ssh.run(f"rm -f {shlex.quote(f)}", on_output=ctx.on_output)
-                removed += 1
+                    continue  # safety check
+                ctx.ssh.run(f"rm -f {shlex.quote(f)}")
+                remove_count += 1
 
-        return StepResult(status=StepStatus.SUCCESS, message=f"Cleanup complete, removed {removed} old backup(s)")
+        out(f"Removed {len(to_remove_ts)} old backup sets ({remove_count} files)")
+        return StepResult(status=StepStatus.SUCCESS, message=f"Removed {len(to_remove_ts)} sets")

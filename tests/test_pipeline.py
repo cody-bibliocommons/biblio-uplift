@@ -213,14 +213,14 @@ class NonSkippableStep(PipelineStep):
 
 class TestDryRunNonSkippable:
     @patch("biblio_uplift.core.pipeline.fcntl")
-    def test_dry_run_executes_non_skippable_steps(self, mock_fcntl, tmp_path):
-        """Dry run should execute steps with skippable=False (like preflight)."""
+    def test_dry_run_skips_all_steps(self, mock_fcntl, tmp_path):
+        """Dry run should skip ALL steps, including non-skippable ones."""
         non_skip = NonSkippableStep()
         skip = SuccessStep()
         p = Pipeline("test", [non_skip, skip])
         ctx = _make_ctx(tmp_path, dry_run=True)
         assert p.run(ctx) is True
-        assert non_skip.status == StepStatus.SUCCESS
+        assert non_skip.status == StepStatus.SKIPPED
         assert skip.status == StepStatus.SKIPPED
 
 
@@ -236,14 +236,20 @@ class TestFailureNotification:
         config = config.model_copy(update={"on_failure_cmd": "notify-failure.sh"})
         ssh = make_mock_ssh()
         ctx = PipelineContext(config=config, ssh=ssh)
+        mock_proc = MagicMock()
+        mock_proc.communicate.return_value = ("", "")
+        mock_proc.returncode = 0
+        mock_proc.pid = 12345
+        mock_subprocess.Popen.return_value = mock_proc
         p = Pipeline("test", [FailStep()])
         p.run(ctx)
-        mock_subprocess.run.assert_called_with(
+        mock_subprocess.Popen.assert_called_with(
             "notify-failure.sh",
             shell=True,
-            capture_output=True,
+            stdout=mock_subprocess.PIPE,
+            stderr=mock_subprocess.PIPE,
             text=True,
-            timeout=30,
+            start_new_session=True,
         )
 
     @patch("biblio_uplift.core.pipeline._subprocess")
@@ -256,7 +262,7 @@ class TestFailureNotification:
         ctx = PipelineContext(config=config, ssh=ssh)
         p = Pipeline("test", [SuccessStep()])
         p.run(ctx)
-        mock_subprocess.run.assert_not_called()
+        mock_subprocess.Popen.assert_not_called()
 
 
 class TestSuccessNotification:
@@ -268,14 +274,20 @@ class TestSuccessNotification:
         config = config.model_copy(update={"on_success_cmd": "notify-success.sh"})
         ssh = make_mock_ssh()
         ctx = PipelineContext(config=config, ssh=ssh)
+        mock_proc = MagicMock()
+        mock_proc.communicate.return_value = ("", "")
+        mock_proc.returncode = 0
+        mock_proc.pid = 12345
+        mock_subprocess.Popen.return_value = mock_proc
         p = Pipeline("test", [SuccessStep()])
         p.run(ctx)
-        mock_subprocess.run.assert_called_with(
+        mock_subprocess.Popen.assert_called_with(
             "notify-success.sh",
             shell=True,
-            capture_output=True,
+            stdout=mock_subprocess.PIPE,
+            stderr=mock_subprocess.PIPE,
             text=True,
-            timeout=30,
+            start_new_session=True,
         )
 
     @patch("biblio_uplift.core.pipeline._subprocess")
@@ -286,10 +298,15 @@ class TestSuccessNotification:
         config = config.model_copy(update={"on_success_cmd": "notify.sh"})
         ssh = make_mock_ssh()
         ctx = PipelineContext(config=config, ssh=ssh)
+        mock_proc = MagicMock()
+        mock_proc.communicate.return_value = ("", "")
+        mock_proc.returncode = 0
+        mock_proc.pid = 12345
+        mock_subprocess.Popen.return_value = mock_proc
         p = Pipeline("test", [SuccessStep()])
         p.run(ctx)
-        # subprocess.run was called locally
-        mock_subprocess.run.assert_called_once()
+        # subprocess.Popen was called locally
+        mock_subprocess.Popen.assert_called_once()
         # ssh.run was NOT called with the notification command
         for c in ssh.run.call_args_list:
             assert "notify.sh" not in str(c)

@@ -1,9 +1,14 @@
+import logging
+
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal
 from textual.widgets import ContentSwitcher, Footer, Header
+from textual.worker import Worker, WorkerState
 
 from biblio_uplift.tui.widgets.sidebar import Sidebar
+
+logger = logging.getLogger(__name__)
 
 SECTIONS = [
     ("dashboard", "Dashboard"),
@@ -13,6 +18,7 @@ SECTIONS = [
     ("backups", "Backups"),
     ("config", "Config Editor"),
     ("history", "History"),
+    ("tools", "Tools"),
 ]
 
 
@@ -30,7 +36,17 @@ class UpgradeApp(App):
         Binding("5", "switch_section('backups')", "Backups", show=False),
         Binding("6", "switch_section('config')", "Config", show=False),
         Binding("7", "switch_section('history')", "History", show=False),
+        Binding("8", "switch_section('tools')", "Tools", show=False),
     ]
+
+    def __init__(self, debug: bool = False, **kwargs):
+        super().__init__(**kwargs)
+        self._debug = debug
+
+    def on_mount(self) -> None:
+        if not logging.getLogger().handlers:
+            from biblio_uplift.cli.main import setup_logging
+            setup_logging(debug=self._debug)
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -43,6 +59,7 @@ class UpgradeApp(App):
                 from biblio_uplift.tui.screens.dashboard import DashboardPanel
                 from biblio_uplift.tui.screens.history import HistoryPanel
                 from biblio_uplift.tui.screens.server_status import ServerStatusPanel
+                from biblio_uplift.tui.screens.tools import ToolsPanel
                 from biblio_uplift.tui.screens.upgrade import UpgradePanel
 
                 yield DashboardPanel(id="dashboard")
@@ -52,6 +69,7 @@ class UpgradeApp(App):
                 yield BackupsPanel(id="backups")
                 yield ConfigPanel(id="config")
                 yield HistoryPanel(id="history")
+                yield ToolsPanel(id="tools")
         yield Footer()
 
     def action_switch_section(self, section_id: str) -> None:
@@ -62,3 +80,9 @@ class UpgradeApp(App):
 
     def on_sidebar_selected(self, event: Sidebar.Selected) -> None:
         self.action_switch_section(event.section_id)
+
+    def on_worker_state_changed(self, event: Worker.StateChanged) -> None:
+        if event.state == WorkerState.ERROR:
+            error = event.worker.error
+            logger.error("Worker '%s' failed: %s", event.worker.name, error, exc_info=error)
+            self.notify(f"Background task failed: {error}", severity="error", timeout=10)

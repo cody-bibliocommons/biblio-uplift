@@ -7,6 +7,7 @@ from biblio_uplift.core.pipeline import PipelineContext, PipelineStep, StepResul
 
 
 def _compose_cmd(config: ProjectConfig) -> str:
+    """Build the inner compose command (without bash -c wrapper)."""
     cmd = f"cd {shlex.quote(str(config.project_dir))} && {config.compose_command}"
     for f in config.compose_files:
         cmd += f" -f {shlex.quote(f)}"
@@ -17,12 +18,18 @@ def _compose_cmd(config: ProjectConfig) -> str:
     return cmd
 
 
+def _bash_compose(config: ProjectConfig, subcommand: str) -> str:
+    """Build a bash -c wrapped compose command with subcommand."""
+    inner = f"{_compose_cmd(config)} {subcommand}"
+    return f"bash -c {shlex.quote(inner)}"
+
+
 class DockerDownStep(PipelineStep):
     name = "docker_down"
     description = "Stop containers with docker compose down"
 
     def execute(self, ctx: PipelineContext) -> StepResult:
-        cmd = f"{_compose_cmd(ctx.config)} down"
+        cmd = _bash_compose(ctx.config, "down")
         if ctx.on_output:
             ctx.on_output(f"$ {cmd}")
         result = ctx.ssh.run(cmd, timeout=120, on_output=ctx.on_output)
@@ -33,7 +40,7 @@ class DockerDownStep(PipelineStep):
     def rollback(self, ctx: PipelineContext) -> None:
         out = ctx.on_output or (lambda x: None)
         out("Rollback: bringing services back up...")
-        cmd = _compose_cmd(ctx.config) + " up -d"
+        cmd = _bash_compose(ctx.config, "up -d")
         ctx.ssh.run(cmd, timeout=120, on_output=out)
 
 
@@ -42,7 +49,7 @@ class DockerPullStep(PipelineStep):
     description = "Pull latest container images"
 
     def execute(self, ctx: PipelineContext) -> StepResult:
-        cmd = f"{_compose_cmd(ctx.config)} pull"
+        cmd = _bash_compose(ctx.config, "pull")
         if ctx.on_output:
             ctx.on_output(f"$ {cmd}")
         result = ctx.ssh.run(cmd, timeout=600, on_output=ctx.on_output)
@@ -56,7 +63,7 @@ class DockerUpStep(PipelineStep):
     description = "Start containers with docker compose up -d"
 
     def execute(self, ctx: PipelineContext) -> StepResult:
-        cmd = f"{_compose_cmd(ctx.config)} up -d"
+        cmd = _bash_compose(ctx.config, "up -d")
         if ctx.on_output:
             ctx.on_output(f"$ {cmd}")
         result = ctx.ssh.run(cmd, timeout=120, on_output=ctx.on_output)

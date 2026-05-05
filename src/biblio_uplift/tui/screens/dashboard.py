@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import logging
+
+from textual import on
 from textual.app import ComposeResult
 from textual.containers import Horizontal
 from textual.widget import Widget
@@ -7,6 +10,8 @@ from textual.widgets import Button, DataTable, Static
 
 from biblio_uplift.config.loader import get_config_dir, list_configs
 from biblio_uplift.history.audit import read_history
+
+logger = logging.getLogger(__name__)
 
 
 class DashboardPanel(Widget):
@@ -45,6 +50,7 @@ class DashboardPanel(Widget):
                 duration = "\u2014"
             table.add_row(cfg.name, cfg.ssh_host, ts, result, duration)
 
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "btn-refresh":
-            self._refresh()
+    @on(Button.Pressed, "#btn-refresh")
+    def handle_refresh(self, event: Button.Pressed) -> None:
+        logger.debug("handle_refresh fired")
+        self._refresh()

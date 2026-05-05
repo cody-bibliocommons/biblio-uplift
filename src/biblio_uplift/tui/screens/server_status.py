@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from textual import work
+from textual import on, work
 from textual.app import ComposeResult
 from textual.containers import Horizontal
 from textual.widget import Widget
@@ -16,9 +16,10 @@ logger = logging.getLogger(__name__)
 
 class ServerStatusPanel(Widget):
     DEFAULT_CSS = """
-    ServerStatusPanel { width: 1fr; height: 1fr; padding: 1; }
+    ServerStatusPanel { width: 1fr; height: 1fr; layout: vertical; }
     #status-title { text-style: bold; color: $primary; padding: 0 0 1 0; }
-    #status-select { width: 40; margin: 0 0 1 0; }
+    #status-controls { height: auto; }
+    #status-controls Select { width: 30; }
     #status-log { height: 1fr; }
     """
 
@@ -26,32 +27,39 @@ class ServerStatusPanel(Widget):
         yield Static("Server Status", id="status-title")
         configs = list_configs(get_config_dir())
         options = [(cfg.name, cfg.name) for cfg in configs]
-        with Horizontal():
+        with Horizontal(id="status-controls"):
             yield Select(options, id="status-select", prompt="Select project")
-            yield Button("Check", id="btn-check", variant="primary")
+            yield Button("Check", id="btn-check", variant="primary", classes="toolbar-btn")
         yield RichLog(id="status-log", wrap=True, highlight=True, markup=True)
 
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "btn-check":
-            select = self.query_one("#status-select", Select)
-            if select.value == Select.BLANK:
-                self.app.notify("Select a project first", severity="warning")
-                return
-            self._run_check(str(select.value))
+    @on(Button.Pressed, "#btn-check")
+    def handle_check(self, event: Button.Pressed) -> None:
+        logger.debug("handle_check fired")
+        select = self.query_one("#status-select", Select)
+        if select.value == Select.NULL:
+            logger.debug("handle_check: no project selected")
+            self.app.notify("Select a project first", severity="warning")
+            return
+        logger.debug("handle_check: starting check for %s", select.value)
+        self._run_check(str(select.value))
+
+    def _get_status_log(self) -> RichLog:
+        return self.query_one("#status-log", RichLog)
 
     @work(thread=True)
     def _run_check(self, project_name: str) -> None:
         import shlex
         from pathlib import Path
 
-        log = self.query_one("#status-log", RichLog)
-        self.call_from_thread(log.clear)
-        self.call_from_thread(log.write, f"[bold]Checking {project_name}...[/bold]")
+        logger.info("TUI status check started: project=%s", project_name)
+        log = self.app.call_from_thread(self._get_status_log)
+        self.app.call_from_thread(log.clear)
+        self.app.call_from_thread(log.write, f"[bold]Checking {project_name}...[/bold]")
 
         configs = list_configs(get_config_dir())
         config = next((c for c in configs if c.name == project_name), None)
         if not config:
-            self.call_from_thread(log.write, "[red]Config not found[/red]")
+            self.app.call_from_thread(log.write, "[red]Config not found[/red]")
             return
 
         try:
@@ -63,19 +71,19 @@ class ServerStatusPanel(Widget):
                 port=config.ssh_port,
             )
         except FileNotFoundError as e:
-            self.call_from_thread(log.write, f"[red]SSH key error: {e}[/red]")
+            self.app.call_from_thread(log.write, f"[red]SSH key error: {e}[/red]")
             return
 
         def out(line):
-            self.call_from_thread(log.write, line)
+            self.app.call_from_thread(log.write, line)
 
         # Uptime
-        r = ssh.run("uptime -p")
+        r = ssh.run("uptime -p", sudo=False)
         if r.ok:
             out(f"Uptime: {r.stdout.strip()}")
 
         # Reboot required
-        r = ssh.run("cat /var/run/reboot-required 2>/dev/null || echo 'No reboot required'")
+        r = ssh.run("cat /var/run/reboot-required 2>/dev/null || echo 'No reboot required'", sudo=False)
         if r.ok:
             msg = r.stdout.strip()
             if "restart required" in msg.lower():
@@ -89,7 +97,13 @@ class ServerStatusPanel(Widget):
             out(f"Disk: {r.stdout.strip()}")
 
         # Git
-        r = ssh.run(f"cd {shlex.quote(str(config.project_dir))} && git log --oneline -1")
+        dir_q = shlex.quote(str(config.project_dir))
+        inner = (
+            f"grep -q bitbucket.org ~/.ssh/known_hosts 2>/dev/null"
+            f" || ssh-keyscan -t ed25519 bitbucket.org >> ~/.ssh/known_hosts 2>/dev/null; "
+            f"cd {dir_q} && git -c safe.directory={dir_q} log --oneline -1"
+        )
+        r = ssh.run(f"bash -c {shlex.quote(inner)}")
         if r.ok:
             out(f"Git: {r.stdout.strip()}")
 
@@ -101,9 +115,7 @@ class ServerStatusPanel(Widget):
         # Containers
         out("")
         out("[bold]Containers:[/bold]")
-        from biblio_uplift.core.steps.docker import _compose_cmd
-
-        r = ssh.run(f"{_compose_cmd(config)} ps --format 'table {{{{.Name}}}}\t{{{{.Status}}}}\t{{{{.Image}}}}'")
+        r = ssh.run('docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Image}}"')
         if r.ok and r.stdout.strip():
             for line in r.stdout.strip().splitlines():
                 if "(healthy)" in line:
@@ -118,12 +130,46 @@ class ServerStatusPanel(Widget):
         # Backups
         out("")
         out("[bold]Recent backups:[/bold]")
-        r = ssh.run(f"ls -1t {shlex.quote(str(config.backup_dir))}/*.tar.gz 2>/dev/null | head -5")
+        inner = f"ls -1t {shlex.quote(str(config.backup_dir))}/*.tar.gz 2>/dev/null | head -5"
+        r = ssh.run(f"bash -c {shlex.quote(inner)}")
         if r.ok and r.stdout.strip():
             for line in r.stdout.strip().splitlines():
                 out(f"  {Path(line.strip()).name}")
         else:
             out("  [yellow]None found[/yellow]")
 
+        # Memory & Swap
+        out("")
+        out("[bold]Memory:[/bold]")
+        r = ssh.run("free -h")
+        if r.ok:
+            for line in r.stdout.strip().splitlines():
+                out(f"  {line}")
+
+        # Top Processes by CPU
+        out("")
+        out("[bold]Top Processes (CPU):[/bold]")
+        r = ssh.run("ps aux --sort=-%cpu | head -6")
+        if r.ok:
+            for line in r.stdout.strip().splitlines():
+                out(f"  {line}")
+
+        # Container Resource Usage
+        out("")
+        out("[bold]Container Resources:[/bold]")
+        r = ssh.run('docker stats --no-stream --format "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.NetIO}}"')
+        if r.ok:
+            for line in r.stdout.strip().splitlines():
+                out(f"  {line}")
+
+        # Disk Usage Breakdown
+        out("")
+        out("[bold]Disk Usage Breakdown:[/bold]")
+        for d in ["/var/log", "/var/cache", "/tmp", str(config.project_dir)]:  # nosec B108
+            r = ssh.run(f"du -sh {shlex.quote(d)} 2>/dev/null")
+            if r.ok and r.stdout.strip():
+                out(f"  {r.stdout.strip()}")
+
         out("")
         out("[green]Status check complete.[/green]")
+        logger.info("TUI status check finished: project=%s", project_name)
