@@ -77,15 +77,15 @@ biblio-uplift history --last 10
 
 ### Dashboard
 
-![Dashboard](docs/screenshots/dashboard.svg)
+![Dashboard](docs/screenshots/dashboard.png)
 
 ### Upgrade Pipeline
 
-![Upgrade](docs/screenshots/upgrade.svg)
+![Upgrade](docs/screenshots/upgrade.png)
 
 ### Tools
 
-![Tools](docs/screenshots/tools.svg)
+![Tools](docs/screenshots/tools.png)
 
 ## Configuration
 
