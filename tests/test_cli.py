@@ -1118,3 +1118,210 @@ def test_config_validate_compose_not_found(runner, mock_ssh_class, test_config_d
     result = runner.invoke(cli, ["config", "validate", "test-proj"])
     assert result.exit_code == 0
     assert "not found" in result.output
+
+
+# --- config delete (lines 505-512) ---
+
+
+def test_config_delete_success(runner, test_config_dir):
+    """Cover config delete happy path."""
+    result = runner.invoke(cli, ["config", "delete", "test-proj", "--non-interactive"])
+    assert result.exit_code == 0
+    assert "Deleted" in result.output
+
+
+def test_config_delete_not_found(runner, test_config_dir):
+    """Cover config delete when project doesn't exist."""
+    result = runner.invoke(cli, ["config", "delete", "nonexistent", "--non-interactive"])
+    assert result.exit_code == 1
+    assert "Config not found" in result.output
+
+
+# --- config edit (lines 519-527) ---
+
+
+def test_config_edit_success(runner, test_config_dir, monkeypatch):
+    """Cover config edit happy path."""
+    monkeypatch.setenv("EDITOR", "true")  # 'true' command does nothing
+    with patch("subprocess.call", return_value=0) as mock_call:
+        result = runner.invoke(cli, ["config", "edit", "test-proj"])
+        assert result.exit_code == 0
+        mock_call.assert_called_once()
+
+
+def test_config_edit_not_found(runner, test_config_dir):
+    """Cover config edit when project doesn't exist."""
+    result = runner.invoke(cli, ["config", "edit", "nonexistent"])
+    assert result.exit_code == 1
+    assert "Config not found" in result.output
+
+
+# --- resume corrupt state (lines 401-403) ---
+
+
+def test_resume_corrupt_state(runner, mock_ssh_class, test_config_dir, monkeypatch):
+    """Cover resume with corrupted state (missing keys)."""
+    monkeypatch.setattr(
+        "biblio_uplift.core.state.load_resume_state",
+        lambda: {"bad": "data"},  # missing 'project' and 'completed_steps'
+    )
+    result = runner.invoke(cli, ["resume"])
+    assert result.exit_code == 1
+    assert "corrupted" in result.output
+
+
+# --- service-update (lines 778-832) ---
+
+
+def test_service_update_success(runner, mock_ssh_class, test_config_dir, monkeypatch):
+    """Cover service-update happy path."""
+    monkeypatch.setattr("biblio_uplift.history.audit.record_run", lambda **kw: None)
+    mock_ssh_class.run.return_value = SSHResult(command="test", exit_code=0, stdout="ok\n", stderr="")
+    result = runner.invoke(cli, ["service-update", "test-proj", "web", "--non-interactive"])
+    assert result.exit_code == 0
+    assert "updated successfully" in result.output
+
+
+def test_service_update_git_pull_fails(runner, mock_ssh_class, test_config_dir, monkeypatch):
+    """Cover service-update when git pull fails."""
+    monkeypatch.setattr("biblio_uplift.history.audit.record_run", lambda **kw: None)
+
+    def fake_run(cmd, **kwargs):
+        if "git" in cmd and "fetch" in cmd:
+            return SSHResult(command=cmd, exit_code=1, stdout="", stderr="auth failed")
+        return SSHResult(command=cmd, exit_code=0, stdout="ok\n", stderr="")
+
+    mock_ssh_class.run.side_effect = fake_run
+    result = runner.invoke(cli, ["service-update", "test-proj", "web", "--non-interactive"])
+    assert result.exit_code == 1
+    assert "Git pull failed" in result.output
+
+
+# --- backup prune (lines 882-938) ---
+
+
+def test_backup_prune_success(runner, mock_ssh_class, test_config_dir, monkeypatch):
+    """Cover backup prune with files to remove."""
+    monkeypatch.setattr("biblio_uplift.history.audit.record_run", lambda **kw: None)
+    backup_files = "\n".join(
+        [
+            "/backups/files_20260101_120000.tar.gz",
+            "/backups/volumes_20260101_120000.tar.gz",
+            "/backups/files_20260102_120000.tar.gz",
+            "/backups/volumes_20260102_120000.tar.gz",
+            "/backups/files_20260103_120000.tar.gz",
+            "/backups/volumes_20260103_120000.tar.gz",
+        ]
+    )
+
+    def fake_run(cmd, **kwargs):
+        if "ls -1" in cmd:
+            return SSHResult(command=cmd, exit_code=0, stdout=backup_files, stderr="")
+        return SSHResult(command=cmd, exit_code=0, stdout="ok\n", stderr="")
+
+    mock_ssh_class.run.side_effect = fake_run
+    result = runner.invoke(cli, ["backup", "prune", "test-proj", "--keep", "2", "--non-interactive"])
+    assert result.exit_code == 0
+    assert "Prune complete" in result.output
+
+
+def test_backup_prune_nothing_to_prune(runner, mock_ssh_class, test_config_dir, monkeypatch):
+    """Cover backup prune when nothing to remove."""
+    monkeypatch.setattr("biblio_uplift.history.audit.record_run", lambda **kw: None)
+    backup_files = "/backups/files_20260101_120000.tar.gz\n"
+
+    def fake_run(cmd, **kwargs):
+        if "ls -1" in cmd:
+            return SSHResult(command=cmd, exit_code=0, stdout=backup_files, stderr="")
+        return SSHResult(command=cmd, exit_code=0, stdout="ok\n", stderr="")
+
+    mock_ssh_class.run.side_effect = fake_run
+    result = runner.invoke(cli, ["backup", "prune", "test-proj", "--keep", "5", "--non-interactive"])
+    assert result.exit_code == 0
+    assert "Nothing to prune" in result.output
+
+
+def test_backup_prune_no_backups(runner, mock_ssh_class, test_config_dir, monkeypatch):
+    """Cover backup prune when no backups exist."""
+    monkeypatch.setattr("biblio_uplift.history.audit.record_run", lambda **kw: None)
+    mock_ssh_class.run.return_value = SSHResult(command="ls", exit_code=1, stdout="", stderr="")
+    result = runner.invoke(cli, ["backup", "prune", "test-proj", "--non-interactive"])
+    assert result.exit_code == 0
+    assert "No backups found" in result.output
+
+
+# --- tool list (lines 950-960) ---
+
+
+def test_tool_list(runner, test_config_dir):
+    """Cover tool list command."""
+    result = runner.invoke(cli, ["tool", "list"])
+    assert result.exit_code == 0
+
+
+# --- tool run (lines 970-1005) ---
+
+
+def test_tool_run_success(runner, mock_ssh_class, test_config_dir, monkeypatch):
+    """Cover tool run happy path."""
+    from unittest.mock import MagicMock as MM
+
+    mock_tool = MM()
+    mock_tool.name = "test-tool"
+    mock_tool.category = "test"
+    mock_tool.description = "A test tool"
+    mock_tool.read_only = True
+    mock_tool.execute.return_value = MM(success=True, error=None)
+    monkeypatch.setattr(
+        "biblio_uplift.core.tools.get_all_tools",
+        lambda: [mock_tool],
+    )
+    result = runner.invoke(cli, ["tool", "run", "test-proj", "test-tool"])
+    assert result.exit_code == 0
+    assert "Done" in result.output
+
+
+def test_tool_run_unknown(runner, mock_ssh_class, test_config_dir, monkeypatch):
+    """Cover tool run with unknown tool name."""
+    monkeypatch.setattr("biblio_uplift.core.tools.get_all_tools", lambda: [])
+    result = runner.invoke(cli, ["tool", "run", "test-proj", "nonexistent"])
+    assert result.exit_code == 1
+    assert "Unknown tool" in result.output
+
+
+def test_tool_run_dry_run(runner, mock_ssh_class, test_config_dir, monkeypatch):
+    """Cover tool run with --dry-run flag."""
+    from unittest.mock import MagicMock as MM
+
+    mock_tool = MM()
+    mock_tool.name = "mutating-tool"
+    mock_tool.category = "test"
+    mock_tool.description = "A mutating tool"
+    mock_tool.read_only = False
+    mock_tool.dry_run.return_value = MM(success=True, error=None)
+    monkeypatch.setattr(
+        "biblio_uplift.core.tools.get_all_tools",
+        lambda: [mock_tool],
+    )
+    result = runner.invoke(cli, ["tool", "run", "test-proj", "mutating-tool", "--dry-run"])
+    assert result.exit_code == 0
+    assert "DRY RUN" in result.output
+
+
+def test_tool_run_failure(runner, mock_ssh_class, test_config_dir, monkeypatch):
+    """Cover tool run when tool fails."""
+    from unittest.mock import MagicMock as MM
+
+    mock_tool = MM()
+    mock_tool.name = "fail-tool"
+    mock_tool.category = "test"
+    mock_tool.description = "A failing tool"
+    mock_tool.read_only = True
+    mock_tool.execute.return_value = MM(success=False, error="connection timeout")
+    monkeypatch.setattr(
+        "biblio_uplift.core.tools.get_all_tools",
+        lambda: [mock_tool],
+    )
+    result = runner.invoke(cli, ["tool", "run", "test-proj", "fail-tool"])
+    assert result.exit_code == 1
+    assert "Failed" in result.output

@@ -416,12 +416,12 @@ class TestLogCleanupEdgeCases:
         output = []
         mock_ctx.on_output = output.append
         mock_ctx.ssh.run.side_effect = [
-            ok(stdout="3\n"),   # find .gz
-            ok(stdout="1\n"),   # find .old
-            ok(stdout="0\n"),   # find .1
+            ok(stdout="3\n"),  # find .gz
+            ok(stdout="1\n"),  # find .old
+            ok(stdout="0\n"),  # find .1
             fail(stderr="permission denied"),  # truncate fails
-            ok(stdout="Vacuuming done\n"),     # journalctl
-            ok(),              # apt-get clean
+            ok(stdout="Vacuuming done\n"),  # journalctl
+            ok(),  # apt-get clean
             ok(stdout="0\n"),  # find /tmp
         ]
         result = LogCleanupStep().execute(mock_ctx)
@@ -435,7 +435,7 @@ class TestLogCleanupEdgeCases:
             ok(stdout="0\n"),  # find .old
             ok(stdout="0\n"),  # find .1
             fail(stderr="journal err"),  # journalctl fails
-            ok(),              # apt-get clean
+            ok(),  # apt-get clean
             ok(stdout="0\n"),  # find /tmp
         ]
         result = LogCleanupStep().execute(mock_ctx)
@@ -620,15 +620,17 @@ class TestBackupCleanupSafetyCheck:
     def test_file_outside_backup_dir_skipped(self, mock_ctx):
         bdir = str(mock_ctx.config.backup_dir)
         # 7 files across 7 timestamps, one is outside backup_dir -> retention=5, remove 2 sets
-        files = "\n".join([
-            f"{bdir}/proj_files_20260501_120000.tar.gz",
-            f"{bdir}/proj_files_20260502_120000.tar.gz",
-            f"/etc/passwd_20260503_120000.tar.gz",
-            f"{bdir}/proj_files_20260504_120000.tar.gz",
-            f"{bdir}/proj_files_20260505_120000.tar.gz",
-            f"{bdir}/proj_files_20260506_120000.tar.gz",
-            f"{bdir}/proj_files_20260507_120000.tar.gz",
-        ])
+        files = "\n".join(
+            [
+                f"{bdir}/proj_files_20260501_120000.tar.gz",
+                f"{bdir}/proj_files_20260502_120000.tar.gz",
+                "/etc/passwd_20260503_120000.tar.gz",
+                f"{bdir}/proj_files_20260504_120000.tar.gz",
+                f"{bdir}/proj_files_20260505_120000.tar.gz",
+                f"{bdir}/proj_files_20260506_120000.tar.gz",
+                f"{bdir}/proj_files_20260507_120000.tar.gz",
+            ]
+        )
         mock_ctx.ssh.run.side_effect = [
             ok(stdout=files),  # ls for all tar.gz
             ok(),  # rm for 20260501 file
@@ -651,6 +653,7 @@ class TestCleanupDockerPruneFails:
             ok(stdout=""),  # docker info check
             ok(stdout="10G 5G 5G 50%"),  # df system disk
             ok(stdout="TYPE  TOTAL  ACTIVE  SIZE  RECLAIMABLE\nImages  5  2  1GB  500MB"),  # docker system df before
+            ok(stdout="abc123"),  # compose ps -q (containers running)
             fail(stderr="prune err"),  # first prune command fails
         ]
         result = DockerCleanupStep().execute(mock_ctx)
@@ -947,3 +950,195 @@ class TestAuditRotateNonExistentFile:
         with _patch_history(tmp_path):
             # Don't create the file
             _rotate_history()  # should return early, no error
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# cleanup.py — DockerCleanupStep._dry_run (103-149), LogCleanupStep._dry_run (225-267),
+# custom cleanup commands (211-220), docker execute branches (32, 40, 68, 72-73, 76)
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestDockerCleanupDryRun:
+    """Cover DockerCleanupStep._dry_run (lines 103-149)."""
+
+    def test_dry_run_shows_preview(self, mock_ctx):
+        from biblio_uplift.core.steps.cleanup import DockerCleanupStep
+
+        mock_ctx.dry_run = True
+        mock_ctx.config.cleanup.prune_containers = True
+        mock_ctx.config.cleanup.prune_images = True
+        mock_ctx.config.cleanup.prune_volumes = True
+        mock_ctx.config.cleanup.prune_build_cache = True
+        mock_ctx.ssh.run.return_value = ok(stdout="5\n")
+        result = DockerCleanupStep().execute(mock_ctx)
+        assert result.status == StepStatus.SUCCESS
+        assert result.message == "Dry run preview complete"
+
+    def test_dry_run_image_prune_no_running(self, mock_ctx):
+        from biblio_uplift.core.steps.cleanup import DockerCleanupStep
+
+        mock_ctx.dry_run = True
+        mock_ctx.config.cleanup.prune_images = True
+        mock_ctx.config.cleanup.prune_containers = False
+        mock_ctx.config.cleanup.prune_volumes = False
+        mock_ctx.config.cleanup.prune_build_cache = False
+        # _show_system_disk ok, then ps -q returns empty (no running containers)
+        mock_ctx.ssh.run.side_effect = [
+            ok(stdout="50G 10G 40G 20%"),  # _show_system_disk df
+            ok(stdout=""),  # ps -q (no running containers)
+            ok(stdout="TYPE\tRECLAIMABLE\nImages\t5GB"),  # docker system df
+        ]
+        result = DockerCleanupStep().execute(mock_ctx)
+        assert result.status == StepStatus.SUCCESS
+
+
+class TestDockerCleanupExecuteBranches:
+    """Cover docker cleanup execute: docker info fail (40), image prune branches (68, 72-76)."""
+
+    def test_docker_info_fails(self, mock_ctx):
+        from biblio_uplift.core.steps.cleanup import DockerCleanupStep
+
+        mock_ctx.ssh.run.return_value = fail(stderr="Cannot connect to Docker daemon")
+        result = DockerCleanupStep().execute(mock_ctx)
+        assert result.status == StepStatus.FAILED
+        assert "Docker daemon" in result.error
+
+    def test_image_prune_no_running_containers(self, mock_ctx):
+        from biblio_uplift.core.steps.cleanup import DockerCleanupStep
+
+        mock_ctx.config.cleanup.prune_containers = False
+        mock_ctx.config.cleanup.prune_images = True
+        mock_ctx.config.cleanup.prune_volumes = False
+        mock_ctx.config.cleanup.prune_build_cache = False
+        output = []
+        mock_ctx.on_output = output.append
+        mock_ctx.ssh.run.side_effect = [
+            ok(),  # docker info
+            ok(stdout="50G 10G 40G 20%"),  # _show_system_disk before
+            ok(stdout="TYPE SIZE\nImages 5GB"),  # docker system df before
+            ok(stdout=""),  # ps -q (no running containers)
+            ok(stdout="TYPE SIZE\nImages 3GB"),  # docker system df after
+            ok(stdout="50G 10G 40G 20%"),  # _show_system_disk after
+        ]
+        result = DockerCleanupStep().execute(mock_ctx)
+        assert result.status == StepStatus.SUCCESS
+        assert any("Skipping image prune" in line for line in output)
+
+    def test_image_prune_aggressive(self, mock_ctx):
+        from biblio_uplift.core.steps.cleanup import DockerCleanupStep
+
+        mock_ctx.config.cleanup.prune_containers = False
+        mock_ctx.config.cleanup.prune_images = True
+        mock_ctx.config.cleanup.prune_volumes = False
+        mock_ctx.config.cleanup.prune_build_cache = False
+        mock_ctx.config.cleanup.aggressive_prune = True
+        mock_ctx.ssh.run.side_effect = [
+            ok(),  # docker info
+            ok(stdout="50G 10G 40G 20%"),  # _show_system_disk before
+            ok(stdout="TYPE SIZE\nImages 5GB"),  # docker system df before
+            ok(stdout="abc123\n"),  # ps -q (running containers)
+            ok(stdout="pruned"),  # docker image prune -af
+            ok(stdout="TYPE SIZE\nImages 1GB"),  # docker system df after
+            ok(stdout="50G 12G 38G 24%"),  # _show_system_disk after
+        ]
+        result = DockerCleanupStep().execute(mock_ctx)
+        assert result.status == StepStatus.SUCCESS
+
+
+class TestLogCleanupCustomCommands:
+    """Cover cleanup.py lines 211-220: custom cleanup commands."""
+
+    def test_custom_commands_success(self, mock_ctx):
+        mock_ctx.config.cleanup.log_paths = []
+        mock_ctx.config.cleanup.cleanup_commands = ["rm -f /tmp/old.log", "echo done"]
+        mock_ctx.ssh.run.side_effect = [
+            ok(stdout="0\n"),  # find .gz
+            ok(stdout="0\n"),  # find .old
+            ok(stdout="0\n"),  # find .1
+            ok(stdout="Vacuuming done\n"),  # journalctl
+            ok(),  # apt-get clean
+            ok(stdout="0\n"),  # find /tmp
+            ok(stdout="removed\n"),  # custom cmd 1
+            ok(stdout="done\n"),  # custom cmd 2
+        ]
+        result = LogCleanupStep().execute(mock_ctx)
+        assert result.status == StepStatus.SUCCESS
+
+    def test_custom_commands_failure(self, mock_ctx):
+        mock_ctx.config.cleanup.log_paths = []
+        mock_ctx.config.cleanup.cleanup_commands = ["bad-cmd"]
+        output = []
+        mock_ctx.on_output = output.append
+        mock_ctx.ssh.run.side_effect = [
+            ok(stdout="0\n"),  # find .gz
+            ok(stdout="0\n"),  # find .old
+            ok(stdout="0\n"),  # find .1
+            ok(stdout="Vacuuming done\n"),  # journalctl
+            ok(),  # apt-get clean
+            ok(stdout="0\n"),  # find /tmp
+            fail(stderr="command not found"),  # custom cmd fails
+        ]
+        result = LogCleanupStep().execute(mock_ctx)
+        assert result.status == StepStatus.SUCCESS
+        assert any("Warning" in line for line in output)
+
+    def test_custom_commands_empty_output(self, mock_ctx):
+        mock_ctx.config.cleanup.log_paths = []
+        mock_ctx.config.cleanup.cleanup_commands = ["silent-cmd"]
+        mock_ctx.ssh.run.side_effect = [
+            ok(stdout="0\n"),  # find .gz
+            ok(stdout="0\n"),  # find .old
+            ok(stdout="0\n"),  # find .1
+            ok(stdout="Vacuuming done\n"),  # journalctl
+            ok(),  # apt-get clean
+            ok(stdout="0\n"),  # find /tmp
+            ok(stdout=""),  # custom cmd with empty output
+        ]
+        result = LogCleanupStep().execute(mock_ctx)
+        assert result.status == StepStatus.SUCCESS
+
+
+class TestLogCleanupDryRun:
+    """Cover LogCleanupStep._dry_run (lines 225-267)."""
+
+    def test_dry_run_full_preview(self, mock_ctx):
+        mock_ctx.dry_run = True
+        mock_ctx.config.cleanup.log_paths = ["/var/log/app.log"]
+        mock_ctx.config.cleanup.cleanup_commands = ["echo cleanup"]
+        output = []
+        mock_ctx.on_output = output.append
+        mock_ctx.ssh.run.return_value = ok(stdout="5\n")
+        result = LogCleanupStep().execute(mock_ctx)
+        assert result.status == StepStatus.SUCCESS
+        assert result.message == "Dry run preview complete"
+        assert any("DRY RUN" in line for line in output)
+        assert any("Custom cleanup commands" in line for line in output)
+
+    def test_dry_run_no_custom_commands(self, mock_ctx):
+        mock_ctx.dry_run = True
+        mock_ctx.config.cleanup.log_paths = []
+        mock_ctx.config.cleanup.cleanup_commands = []
+        mock_ctx.ssh.run.return_value = ok(stdout="0\n")
+        result = LogCleanupStep().execute(mock_ctx)
+        assert result.status == StepStatus.SUCCESS
+
+
+class TestLogCleanupTmpFileRemoval:
+    """Cover cleanup.py line 163: tmp file count != 0."""
+
+    def test_tmp_files_removed(self, mock_ctx):
+        mock_ctx.config.cleanup.log_paths = []
+        mock_ctx.config.cleanup.cleanup_commands = []
+        output = []
+        mock_ctx.on_output = output.append
+        mock_ctx.ssh.run.side_effect = [
+            ok(stdout="0\n"),  # find .gz
+            ok(stdout="0\n"),  # find .old
+            ok(stdout="0\n"),  # find .1
+            ok(stdout="Vacuuming done\n"),  # journalctl
+            ok(),  # apt-get clean
+            ok(stdout="42\n"),  # find /tmp - non-zero!
+        ]
+        result = LogCleanupStep().execute(mock_ctx)
+        assert result.status == StepStatus.SUCCESS
+        assert any("42" in line for line in output)

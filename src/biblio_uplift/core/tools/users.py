@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shlex
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
@@ -24,7 +25,9 @@ class SudoUsersTool(Tool):
         out("")
 
         # Check /etc/sudoers for NOPASSWD entries
-        r = ssh.run("grep -rh 'NOPASSWD\\|ALL=(ALL)' /etc/sudoers /etc/sudoers.d/ 2>/dev/null | grep -v '^#'")
+        r = ssh.run(
+            "bash -c \"grep -rh 'NOPASSWD\\|ALL=(ALL)' /etc/sudoers /etc/sudoers.d/ 2>/dev/null | grep -v '^#'\""
+        )
         if r.ok and r.stdout.strip():
             out("[bold]NOPASSWD entries (no password required):[/bold]")
             for line in r.stdout.strip().splitlines():
@@ -35,7 +38,7 @@ class SudoUsersTool(Tool):
         out("")
 
         # List sudoers.d files
-        r = ssh.run("ls -la /etc/sudoers.d/ 2>/dev/null")
+        r = ssh.run("bash -c 'ls -la /etc/sudoers.d/ 2>/dev/null'")
         if r.ok and r.stdout.strip():
             out("[bold]Sudoers drop-in files:[/bold]")
             for line in r.stdout.strip().splitlines():
@@ -44,7 +47,7 @@ class SudoUsersTool(Tool):
         out("")
 
         # Show who can sudo by checking group membership
-        r = ssh.run("getent group sudo wheel 2>/dev/null")
+        r = ssh.run("bash -c 'for g in sudo wheel; do getent group $g 2>/dev/null; done'")
         if r.ok and r.stdout.strip():
             out("[bold]Sudo/wheel group members:[/bold]")
             for line in r.stdout.strip().splitlines():
@@ -67,18 +70,35 @@ class AuthorizedKeysTool(Tool):
         return self.execute(ssh, config, out)
 
     def execute(self, ssh: SSHRunner, config: ProjectConfig, out: Callable[[str], None]) -> ToolResult:
-        cmd = (
-            'for user_home in /home/* /root; do '
-            'keys="$user_home/.ssh/authorized_keys"; '
-            'if [ -f "$keys" ]; then '
-            'echo "=== $(basename $user_home) ==="; '
-            'wc -l < "$keys"; '
-            "cat \"$keys\" | awk '{print $NF}'; "
-            "fi; done"
-        )
-        result = ssh.run(cmd, timeout=15)
-        out(result.stdout or "No authorized_keys found.")
-        return ToolResult(success=result.ok, output=result.stdout, error=result.stderr)
+        out("SSH Authorized Keys:")
+        out("")
+        r = ssh.run("bash -c 'ls -d /home/* /root 2>/dev/null'")
+        if not r.ok:
+            return ToolResult(success=False, error="Could not list home directories")
+
+        found = False
+        for home in r.stdout.strip().splitlines():
+            home = home.strip()
+            if not home:
+                continue
+            user = home.split("/")[-1]
+            keys_file = f"{home}/.ssh/authorized_keys"
+            keys_q = shlex.quote(keys_file)
+            r2 = ssh.run(f"bash -c 'test -f {keys_q} && wc -l < {keys_q}'")
+            if r2.ok and r2.stdout.strip():
+                found = True
+                count = r2.stdout.strip()
+                out(f"[bold]{user}[/bold]: {count} key(s)")
+                r3 = ssh.run(f"awk '{{print $NF}}' {keys_q}")
+                if r3.ok:
+                    for line in r3.stdout.strip().splitlines():
+                        out(f"  {line}")
+                out("")
+
+        if not found:
+            out("No authorized_keys found.")
+
+        return ToolResult(success=True)
 
 
 class GroupMembershipTool(Tool):
@@ -91,9 +111,9 @@ class GroupMembershipTool(Tool):
         return self.execute(ssh, config, out)
 
     def execute(self, ssh: SSHRunner, config: ProjectConfig, out: Callable[[str], None]) -> ToolResult:
-        result = ssh.run("getent group docker sudo wheel 2>/dev/null", timeout=15)
+        result = ssh.run("bash -c 'for g in docker sudo wheel; do getent group $g 2>/dev/null; done'", timeout=15)
         out(result.stdout or "No matching groups found.")
-        return ToolResult(success=result.ok, output=result.stdout, error=result.stderr)
+        return ToolResult(success=True, output=result.stdout)
 
 
 TOOLS = [SudoUsersTool(), AuthorizedKeysTool(), GroupMembershipTool()]

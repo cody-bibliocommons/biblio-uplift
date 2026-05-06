@@ -220,9 +220,7 @@ class UpgradePanel(Widget):
         except Exception as e:
             logger.error("Worker crashed: %s", e, exc_info=True)
             with contextlib.suppress(Exception):
-                self.app.call_from_thread(
-                    self._write_output, [f"[bold red]Worker error: {e}[/bold red]"]
-                )
+                self.app.call_from_thread(self._write_output, [f"[bold red]Worker error: {e}[/bold red]"])
 
     def _update_step(self, name: str, icon: str, status: str) -> None:
         try:

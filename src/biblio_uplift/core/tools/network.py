@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shlex
 from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
@@ -22,7 +23,11 @@ class DnsResolutionTool(Tool):
         return self.execute(ssh, config, out)
 
     def execute(self, ssh: SSHRunner, config: ProjectConfig, out: Callable[[str], None]) -> ToolResult:
-        hosts = ["$(hostname -f)", "google.com"]
+        # Resolve remote hostname via separate call (avoids shell expansion injection)
+        hostname_r = ssh.run("hostname -f", timeout=5)
+        remote_host = hostname_r.stdout.strip() if hostname_r.ok else "localhost"
+
+        hosts = [remote_host, "google.com"]
         for url in config.healthcheck_urls:
             host = urlparse(url).hostname
             if host and host not in hosts:
@@ -30,7 +35,7 @@ class DnsResolutionTool(Tool):
 
         lines = []
         for h in hosts:
-            result = ssh.run(f"dig +short {h}", timeout=15)
+            result = ssh.run(f"dig +short {shlex.quote(h)}", timeout=15)
             resolved = result.stdout.strip() or "NXDOMAIN"
             lines.append(f"{h}: {resolved}")
 
@@ -51,7 +56,7 @@ class NtpSyncTool(Tool):
     def execute(self, ssh: SSHRunner, config: ProjectConfig, out: Callable[[str], None]) -> ToolResult:
         sync = ssh.run("timedatectl show --property=NTPSynchronized --value", timeout=15)
         detail = ssh.run(
-            "timedatectl timesync-status 2>/dev/null || chronyc tracking 2>/dev/null || ntpq -p 2>/dev/null",
+            "bash -c 'timedatectl timesync-status 2>/dev/null || chronyc tracking 2>/dev/null || ntpq -p 2>/dev/null'",
             timeout=15,
         )
         output = f"NTPSynchronized: {sync.stdout.strip()}\n{detail.stdout.strip()}"
@@ -74,19 +79,20 @@ class CertificateExpiryTool(Tool):
             host = urlparse(url).hostname
             if not host:
                 continue
-            cmd = (
-                f"echo | openssl s_client -connect {host}:443 -servername {host} 2>/dev/null"
+            host_q = shlex.quote(host)
+            inner = (
+                f"echo | openssl s_client -connect {host_q}:443"
+                f" -servername {host_q} 2>/dev/null"
                 f" | openssl x509 -noout -dates 2>/dev/null"
             )
+            cmd = f"bash -c {shlex.quote(inner)}"
             result = ssh.run(cmd, timeout=15)
             if result.ok and result.stdout.strip():
                 for line in result.stdout.strip().splitlines():
                     if line.startswith("notAfter="):
                         date_str = line.split("=", 1)[1]
                         try:
-                            expiry = datetime.strptime(date_str, "%b %d %H:%M:%S %Y %Z").replace(
-                                tzinfo=timezone.utc
-                            )
+                            expiry = datetime.strptime(date_str, "%b %d %H:%M:%S %Y %Z").replace(tzinfo=timezone.utc)
                             days = (expiry - datetime.now(timezone.utc)).days
                             warn = " ⚠ EXPIRING SOON" if days < 30 else ""
                             lines.append(f"{host}: expires in {days} days{warn}")

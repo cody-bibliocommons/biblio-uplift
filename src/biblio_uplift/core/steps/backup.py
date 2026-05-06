@@ -115,7 +115,7 @@ class BackupCleanupStep(PipelineStep):
         files = [f.strip() for f in result.stdout.strip().splitlines() if f.strip()]
 
         # Extract timestamps and group files by timestamp
-        ts_pattern = re.compile(r'_(\d{8}_\d{6})\.tar\.gz$')
+        ts_pattern = re.compile(r"_(\d{8}_\d{6})\.tar\.gz$")
         groups: dict[str, list[str]] = {}
         for f in files:
             match = ts_pattern.search(f)

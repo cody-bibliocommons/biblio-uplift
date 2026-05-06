@@ -6,7 +6,7 @@ from textual import on, work
 from textual.app import ComposeResult
 from textual.containers import Horizontal
 from textual.widget import Widget
-from textual.widgets import Button, RichLog, Select, Static
+from textual.widgets import Button, Checkbox, RichLog, Select, Static
 
 from biblio_uplift.config.loader import get_config_dir, list_configs
 from biblio_uplift.core.ssh import SSHRunner
@@ -29,6 +29,7 @@ class ServerStatusPanel(Widget):
         options = [(cfg.name, cfg.name) for cfg in configs]
         with Horizontal(id="status-controls"):
             yield Select(options, id="status-select", prompt="Select project")
+            yield Checkbox("Advanced", id="status-advanced", classes="toolbar-chk")
             yield Button("Check", id="btn-check", variant="primary", classes="toolbar-btn")
         yield RichLog(id="status-log", wrap=True, highlight=True, markup=True)
 
@@ -41,13 +42,14 @@ class ServerStatusPanel(Widget):
             self.app.notify("Select a project first", severity="warning")
             return
         logger.debug("handle_check: starting check for %s", select.value)
-        self._run_check(str(select.value))
+        advanced = self.query_one("#status-advanced", Checkbox).value
+        self._run_check(str(select.value), advanced)
 
     def _get_status_log(self) -> RichLog:
         return self.query_one("#status-log", RichLog)
 
     @work(thread=True)
-    def _run_check(self, project_name: str) -> None:
+    def _run_check(self, project_name: str, advanced: bool = False) -> None:
         import shlex
         from pathlib import Path
 
@@ -169,6 +171,96 @@ class ServerStatusPanel(Widget):
             r = ssh.run(f"du -sh {shlex.quote(d)} 2>/dev/null")
             if r.ok and r.stdout.strip():
                 out(f"  {r.stdout.strip()}")
+
+        # Docker Disk Audit (overlay2 vs tracked)
+        out("")
+        out("[bold]Docker Disk:[/bold]")
+        r = ssh.run("docker system df")
+        if r.ok:
+            for line in r.stdout.strip().splitlines():
+                out(f"  {line}")
+        r = ssh.run("du -sh /var/lib/docker/overlay2 2>/dev/null")
+        if r.ok and r.stdout.strip():
+            out(f"  Overlay2 on disk: {r.stdout.strip().split()[0]}")
+
+        # Advanced section
+        if advanced:
+            out("")
+            out("[bold]━━━ Advanced ━━━[/bold]")
+
+            # Systemd failed units
+            out("")
+            out("[bold]Failed Systemd Units:[/bold]")
+            r = ssh.run("systemctl --failed --no-pager --no-legend")
+            if r.ok and r.stdout.strip():
+                for line in r.stdout.strip().splitlines():
+                    out(f"  [red]{line}[/red]")
+            else:
+                out("  [green]None[/green]")
+
+            # Pending security updates
+            out("")
+            out("[bold]Pending Updates:[/bold]")
+            r = ssh.run("bash -c 'apt list --upgradable 2>/dev/null | grep -c upgradable || echo 0'")
+            if r.ok:
+                count = r.stdout.strip()
+                if count != "0":
+                    out(f"  [yellow]{count} packages upgradable[/yellow]")
+                else:
+                    out("  [green]System up to date[/green]")
+
+            # Kernel version + running vs installed
+            out("")
+            out("[bold]Kernel:[/bold]")
+            r = ssh.run("uname -r")
+            if r.ok:
+                out(f"  Running: {r.stdout.strip()}")
+            r = ssh.run("bash -c 'ls /boot/vmlinuz-* 2>/dev/null | sort -V | tail -1'")
+            if r.ok and r.stdout.strip():
+                installed = r.stdout.strip().replace("/boot/vmlinuz-", "")
+                out(f"  Installed: {installed}")
+
+            # Docker networks
+            out("")
+            out("[bold]Docker Networks:[/bold]")
+            r = ssh.run('docker network ls --format "table {{.Name}}\t{{.Driver}}\t{{.Scope}}"')
+            if r.ok:
+                for line in r.stdout.strip().splitlines():
+                    out(f"  {line}")
+
+            # Docker volumes
+            out("")
+            out("[bold]Docker Volumes:[/bold]")
+            r = ssh.run('docker volume ls --format "table {{.Name}}\t{{.Driver}}"')
+            if r.ok:
+                for line in r.stdout.strip().splitlines():
+                    out(f"  {line}")
+
+            # Zombie/defunct processes
+            out("")
+            out("[bold]Zombie Processes:[/bold]")
+            r = ssh.run("bash -c 'ps aux | grep -c defunct || echo 0'")
+            if r.ok:
+                count = r.stdout.strip()
+                if count not in ("0", "1"):  # grep itself matches
+                    out(f"  [yellow]{count} zombie processes[/yellow]")
+                else:
+                    out("  [green]None[/green]")
+
+            # Inode usage
+            out("")
+            out("[bold]Inode Usage:[/bold]")
+            r = ssh.run("bash -c 'df -i / | tail -1'")
+            if r.ok:
+                out(f"  {r.stdout.strip()}")
+
+            # Last logins
+            out("")
+            out("[bold]Last Logins:[/bold]")
+            r = ssh.run("last -5 -w")
+            if r.ok:
+                for line in r.stdout.strip().splitlines()[:5]:
+                    out(f"  {line}")
 
         out("")
         out("[green]Status check complete.[/green]")

@@ -132,7 +132,7 @@ class Pipeline:
                         ctx.on_step_change(step)
                     continue
 
-                if ctx.dry_run and not getattr(step, 'supports_dry_run', False):
+                if ctx.dry_run and not getattr(step, "supports_dry_run", False):
                     step.status = StepStatus.SKIPPED
                     step.result = StepResult(status=StepStatus.SKIPPED, message="Dry run — skipped")
                     if ctx.on_output:

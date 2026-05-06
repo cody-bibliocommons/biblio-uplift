@@ -37,7 +37,7 @@ post_upgrade_hooks: []
 #   - "/opt/scripts/notify-slack.sh 'Upgrade complete'"
 cleanup:
   prune_images: true
-  prune_volumes: false
+  prune_volumes: true
   prune_containers: true
   prune_build_cache: true
   log_retention_days: 30

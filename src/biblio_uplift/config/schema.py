@@ -6,9 +6,10 @@ from pydantic import BaseModel, Field, field_validator
 
 class CleanupConfig(BaseModel):
     prune_images: bool = True
-    prune_volumes: bool = False  # opt-in: unused volumes (excludes labeled 'keep')
+    prune_volumes: bool = True
     prune_containers: bool = True
     prune_build_cache: bool = True
+    aggressive_prune: bool = False
     log_retention_days: int = 30
     log_paths: list[str] = Field(default_factory=list)
     cleanup_commands: list[str] = Field(default_factory=list)

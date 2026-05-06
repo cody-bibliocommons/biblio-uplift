@@ -38,4 +38,5 @@ def get_all_tools() -> list[Tool]:
     from biblio_uplift.core.tools.security import TOOLS as sec
     from biblio_uplift.core.tools.system import TOOLS as sys_tools
     from biblio_uplift.core.tools.users import TOOLS as user_tools
+
     return sec + sys_tools + docker_tools + network_tools + user_tools

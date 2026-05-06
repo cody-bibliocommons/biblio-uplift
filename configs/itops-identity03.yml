@@ -16,8 +16,7 @@ extra_backup_paths:
   - /opt/docker/itops-identity/haproxy
   - /opt/docker/itops-identity/keepalived
   - /opt/docker/itops-identity/fluent-bit
-healthcheck_urls:
-  - https://ops-liv-identity03.bcommons.net
+healthcheck_urls: []
 healthcheck_timeout: 180
 skip_os_update: false
 skip_reboot: false
@@ -25,7 +24,7 @@ pre_upgrade_hooks: []
 post_upgrade_hooks: []
 cleanup:
   prune_images: true
-  prune_volumes: false
+  prune_volumes: true
   prune_containers: true
   prune_build_cache: true
   log_retention_days: 30

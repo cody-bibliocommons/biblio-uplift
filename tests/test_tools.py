@@ -22,7 +22,7 @@ def _mock_config():
 
 def test_get_all_tools():
     tools = get_all_tools()
-    assert len(tools) == 16
+    assert len(tools) == 18
     names = [t.name for t in tools]
     assert "pending-security-updates" in names
     assert "journald-config" in names
@@ -36,7 +36,7 @@ def test_tool_categories():
     categories = {t.category for t in tools}
     assert "security" in categories
     assert "system" in categories
-    assert "docker" in categories
+    assert "Docker" in categories
     assert "Network" in categories
     assert "Users & Access" in categories
 
@@ -46,7 +46,9 @@ def test_read_only_tools():
     read_only = [t for t in tools if t.read_only]
     mutating = [t for t in tools if not t.read_only]
     assert len(read_only) == 11  # 3 security + container-logs + compose-pull-check + 3 network + 3 users
-    assert len(mutating) == 5  # journald, logrotate, fix-permissions, restart, freeipa-logs
+    assert (
+        len(mutating) == 7
+    )  # journald, logrotate, fix-permissions, restart, freeipa-logs, update-service, compose-version
 
 
 def test_tool_execute_with_mock_ssh():

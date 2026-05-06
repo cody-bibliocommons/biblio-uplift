@@ -497,6 +497,36 @@ def config_create(name: str, host: str, project_dir: str, ssh_user: str, ssh_key
     console.print(f"Created config: {path}")
 
 
+@config_group.command("delete")
+@click.argument("project")
+@click.option("--non-interactive", is_flag=True)
+def config_delete(project, non_interactive):
+    """Delete a project configuration."""
+    path = get_config_dir() / f"{project}.yml"
+    if not path.exists():
+        console.print(f"[red]Config not found: {project}[/red]")
+        raise SystemExit(1)
+    if not non_interactive:
+        click.confirm(f"Delete config {project}?", abort=True)
+    path.unlink()
+    console.print(f"Deleted: {path}")
+
+
+@config_group.command("edit")
+@click.argument("project")
+def config_edit_cmd(project):
+    """Open a project config in your editor."""
+    path = get_config_dir() / f"{project}.yml"
+    if not path.exists():
+        console.print(f"[red]Config not found: {project}[/red]")
+        raise SystemExit(1)
+    import os
+    import subprocess
+
+    editor = os.environ.get("EDITOR", "nano")
+    subprocess.call([editor, str(path)])
+
+
 @config_group.command("validate")
 @click.argument("project")
 def config_validate(project):
@@ -739,6 +769,69 @@ def status(project):
         console.print("  Backups: [yellow]none found[/yellow]")
 
 
+@cli.command("service-update")
+@click.argument("project")
+@click.argument("service")
+@click.option("--non-interactive", is_flag=True)
+def service_update(project, service, non_interactive):
+    """Pull repo and recreate a single service."""
+    config = _load_project_config(project)
+    ssh = SSHRunner(
+        host=config.ssh_host,
+        user=config.ssh_user,
+        key_path=config.ssh_key,
+        sudo=config.sudo,
+        port=config.ssh_port,
+    )
+    from biblio_uplift.core.steps.docker import _bash_compose
+
+    console.print(f"Updating service [bold]{service}[/bold] on {config.name}")
+
+    if not non_interactive:
+        click.confirm(f"Pull repo and recreate {service}?", abort=True)
+
+    # Git pull
+    console.print("Pulling latest repo...")
+    project_dir = str(config.project_dir)
+    dir_q = shlex.quote(project_dir)
+    git_cmd = (
+        f"grep -q bitbucket.org ~/.ssh/known_hosts 2>/dev/null"
+        f" || ssh-keyscan -t ed25519 bitbucket.org >> ~/.ssh/known_hosts 2>/dev/null; "
+        f"cd {dir_q} && git -c safe.directory={dir_q} fetch origin && "
+        f"git -c safe.directory={dir_q} reset --hard "
+        f"origin/$(git -c safe.directory={dir_q} rev-parse --abbrev-ref HEAD)"
+    )
+    r = ssh.run(f"bash -c {shlex.quote(git_cmd)}", timeout=120)
+    if not r.ok:
+        console.print(f"[red]Git pull failed: {r.stderr}[/red]")
+        raise SystemExit(1)
+    console.print("  OK")
+
+    # Pull image for the specific service
+    console.print(f"Pulling image for {service}...")
+    r = ssh.run(_bash_compose(config, f"pull {shlex.quote(service)}"), timeout=300)
+    if r.ok:
+        console.print("  OK")
+    else:
+        console.print(f"  [yellow]Warning: {r.stderr}[/yellow]")
+
+    # Recreate only that service
+    console.print(f"Recreating {service}...")
+    r = ssh.run(_bash_compose(config, f"up -d --no-deps --force-recreate {shlex.quote(service)}"), timeout=120)
+    if not r.ok:
+        console.print(f"[red]Recreate failed: {r.stderr}[/red]")
+        raise SystemExit(1)
+    console.print("  OK")
+
+    # Show status
+    console.print("")
+    r = ssh.run(_bash_compose(config, f'ps --format "table {{{{.Name}}}}\t{{{{.Status}}}}" {shlex.quote(service)}'))
+    if r.ok:
+        console.print(r.stdout.strip())
+
+    console.print(f"[green]{service} updated successfully.[/green]")
+
+
 @cli.group()
 def backup():
     """Manage project backups."""
@@ -790,7 +883,13 @@ def backup_prune(project, keep, non_interactive):
 
     config = _load_project_config(project)
     retention = keep if keep is not None else config.backup_retention
-    ssh = SSHRunner(host=config.ssh_host, user=config.ssh_user, key_path=config.ssh_key, sudo=config.sudo, port=config.ssh_port)
+    ssh = SSHRunner(
+        host=config.ssh_host,
+        user=config.ssh_user,
+        key_path=config.ssh_key,
+        sudo=config.sudo,
+        port=config.ssh_port,
+    )
 
     backup_dir = str(config.backup_dir)
     console.print(f"Pruning backups for [bold]{config.name}[/bold] (keeping {retention} sets)")
@@ -805,7 +904,7 @@ def backup_prune(project, keep, non_interactive):
     files = [f.strip() for f in result.stdout.strip().splitlines() if f.strip()]
 
     # Extract timestamps and group
-    ts_pattern = re.compile(r'_(\d{8}_\d{6})\.tar\.gz$')
+    ts_pattern = re.compile(r"_(\d{8}_\d{6})\.tar\.gz$")
     groups: dict[str, list[str]] = {}
     for f in files:
         match = ts_pattern.search(f)
@@ -837,3 +936,70 @@ def backup_prune(project, keep, non_interactive):
             console.print(f"  [red]Failed: {Path(f).name}: {r.stderr}[/red]")
 
     console.print("[green]Prune complete.[/green]")
+
+
+@cli.group()
+def tool():
+    """Run diagnostic and maintenance tools."""
+    pass
+
+
+@tool.command("list")
+def tool_list():
+    """List available tools by category."""
+    from biblio_uplift.core.tools import get_all_tools
+
+    tools = get_all_tools()
+    categories: dict[str, list] = {}
+    for t in tools:
+        categories.setdefault(t.category, []).append(t)
+    for cat, cat_tools in sorted(categories.items()):
+        console.print(f"\n[bold]{cat}[/bold]")
+        for t in cat_tools:
+            ro = "" if t.read_only else " [yellow](mutating)[/yellow]"
+            console.print(f"  {t.name:25s} {t.description}{ro}")
+
+
+@tool.command("run")
+@click.argument("project")
+@click.argument("tool_name")
+@click.option("--dry-run", is_flag=True, help="Preview what would happen")
+@click.option("--non-interactive", is_flag=True)
+def tool_run(project, tool_name, dry_run, non_interactive):
+    """Run a tool against a project."""
+    from biblio_uplift.core.tools import get_all_tools
+
+    config = _load_project_config(project)
+    tools = get_all_tools()
+    selected = next((t for t in tools if t.name == tool_name), None)
+    if not selected:
+        console.print(f"[red]Unknown tool: {tool_name}[/red]")
+        console.print("Run 'biblio-uplift tool list' to see available tools.")
+        raise SystemExit(1)
+
+    ssh = SSHRunner(
+        host=config.ssh_host,
+        user=config.ssh_user,
+        key_path=config.ssh_key,
+        sudo=config.sudo,
+        port=config.ssh_port,
+    )
+
+    if not selected.read_only and not dry_run and not non_interactive:
+        click.confirm(f"Run {selected.name} on {config.name}? (modifies system)", abort=True)
+
+    def out(line):
+        console.print(f"  {line}")
+
+    console.print(f"[bold]{selected.name}[/bold] on {config.name}")
+    if dry_run and not selected.read_only:
+        console.print("[yellow]DRY RUN[/yellow]")
+        result = selected.dry_run(ssh, config, out)
+    else:
+        result = selected.execute(ssh, config, out)
+
+    if result.success:
+        console.print("[green]Done.[/green]")
+    else:
+        console.print(f"[red]Failed: {result.error}[/red]")
+        raise SystemExit(1)

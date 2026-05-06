@@ -6,7 +6,7 @@ from textual import on, work
 from textual.app import ComposeResult
 from textual.containers import Horizontal
 from textual.widget import Widget
-from textual.widgets import Button, Checkbox, RichLog, Select, Static, Tree
+from textual.widgets import Button, Checkbox, Input, RichLog, Select, Static, Tree
 
 from biblio_uplift.config.loader import get_config_dir, list_configs
 from biblio_uplift.core.ssh import SSHRunner
@@ -21,6 +21,7 @@ class ToolsPanel(Widget):
     #tools-title { text-style: bold; color: $primary; padding: 0 0 1 0; }
     #tools-controls { height: auto; }
     #tools-controls Select { width: 30; }
+    #tools-controls Input { width: 20; }
     #tools-body { height: 1fr; layout: horizontal; }
     #tools-tree { width: 30; border: solid $primary-darken-2; padding: 1; }
     #tools-log { width: 1fr; }
@@ -37,6 +38,7 @@ class ToolsPanel(Widget):
         options = [(cfg.name, cfg.name) for cfg in configs]
         with Horizontal(id="tools-controls"):
             yield Select(options, id="tools-project", prompt="Select project")
+            yield Input(placeholder="service (optional)", id="tools-service")
             yield Checkbox("Dry run", id="tools-dryrun", classes="toolbar-chk")
             yield Button("Run", id="btn-run-tool", variant="success", classes="toolbar-btn")
         with Horizontal(id="tools-body"):
@@ -65,7 +67,9 @@ class ToolsPanel(Widget):
                 log.write(f"[bold]{tool.name}[/bold]")
                 log.write(f"{tool.description}")
                 log.write(f"Category: {tool.category}")
-                log.write(f"Read-only: {'[green]Yes[/green]' if tool.read_only else '[bold red]No[/bold red] (modifies system)'}")
+                log.write(
+                    f"Read-only: {'[green]Yes[/green]' if tool.read_only else '[bold red]No[/bold red] (modifies system)'}"
+                )
                 log.write("")
                 log.write("Select a project and click Run.")
             except Exception:
@@ -85,6 +89,9 @@ class ToolsPanel(Widget):
             return
         dry_run = self.query_one("#tools-dryrun", Checkbox).value
         tool = self._selected_tool
+        # Set target_service if the tool supports it
+        if hasattr(tool, "target_service"):
+            tool.target_service = self.query_one("#tools-service", Input).value.strip()
         # For mutating tools without dry-run, ask confirmation
         if not tool.read_only and not dry_run:
             # Simple confirmation via notify + proceed
@@ -116,8 +123,11 @@ class ToolsPanel(Widget):
                 return
 
             ssh = SSHRunner(
-                host=config.ssh_host, user=config.ssh_user,
-                key_path=config.ssh_key, sudo=config.sudo, port=config.ssh_port,
+                host=config.ssh_host,
+                user=config.ssh_user,
+                key_path=config.ssh_key,
+                sudo=config.sudo,
+                port=config.ssh_port,
             )
 
             def out(line: str) -> None:
@@ -143,5 +153,8 @@ class ToolsPanel(Widget):
             logger.error("Tool error: %s", e, exc_info=True)
             output_lines.append(f"[bold red]Error: {e}[/bold red]")
         finally:
+            # Reset tool state
+            if hasattr(tool, "target_service"):
+                tool.target_service = ""
             self._task_active = False
             self.app.call_from_thread(self._write_output, output_lines)

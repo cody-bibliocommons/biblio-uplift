@@ -19,7 +19,7 @@ class PendingSecurityUpdates(Tool):
         return self.execute(ssh, config, out)
 
     def execute(self, ssh: SSHRunner, config: ProjectConfig, out: Callable[[str], None]) -> ToolResult:
-        result = ssh.run("apt-get update -qq 2>/dev/null && apt list --upgradable 2>/dev/null", timeout=60)
+        result = ssh.run("bash -c 'apt-get update -qq 2>/dev/null && apt list --upgradable 2>/dev/null'", timeout=60)
         out(result.stdout or "No upgradable packages.")
         return ToolResult(success=result.ok, output=result.stdout, error=result.stderr)
 
@@ -47,7 +47,7 @@ class SshConfigReview(Tool):
         return self.execute(ssh, config, out)
 
     def execute(self, ssh: SSHRunner, config: ProjectConfig, out: Callable[[str], None]) -> ToolResult:
-        result = ssh.run("sshd -T 2>/dev/null || cat /etc/ssh/sshd_config", timeout=15)
+        result = ssh.run("bash -c 'sshd -T 2>/dev/null || cat /etc/ssh/sshd_config'", timeout=15)
         if not result.ok:
             out(result.stderr)
             return ToolResult(success=False, error=result.stderr)

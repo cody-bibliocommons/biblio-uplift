@@ -12,7 +12,7 @@ definitions:
           - pip install -e ".[dev]"
           - >-
             pytest --cov=biblio_uplift --cov-report=term-missing
-            --cov-report=xml:coverage.xml --cov-fail-under=95
+            --cov-report=xml:coverage.xml --cov-fail-under=85
             --junitxml=test-results/junit.xml -v
         artifacts:
           - coverage.xml

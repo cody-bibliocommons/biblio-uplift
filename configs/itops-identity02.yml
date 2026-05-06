@@ -28,7 +28,7 @@ pre_upgrade_hooks: []
 post_upgrade_hooks: []
 cleanup:
   prune_images: true
-  prune_volumes: false
+  prune_volumes: true
   prune_containers: true
   prune_build_cache: true
   log_retention_days: 30

@@ -65,7 +65,7 @@ class TestCleanupConfig:
     def test_defaults(self):
         c = CleanupConfig()
         assert c.prune_images is True
-        assert c.prune_volumes is False
+        assert c.prune_volumes is True
         assert c.prune_containers is True
         assert c.prune_build_cache is True
         assert c.log_retention_days == 30
@@ -176,8 +176,8 @@ class TestNewFieldDefaults:
         config = ProjectConfig(name="t", ssh_host="h", project_dir="/tmp")
         assert config.apt_timeout == 600
 
-    def test_prune_volumes_default_false(self):
-        assert CleanupConfig().prune_volumes is False
+    def test_prune_volumes_default_true(self):
+        assert CleanupConfig().prune_volumes is True
 
     def test_ssh_port_default(self):
         config = ProjectConfig(name="t", ssh_host="h", project_dir="/tmp")

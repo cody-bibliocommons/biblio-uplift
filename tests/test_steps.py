@@ -139,9 +139,7 @@ class TestBackupCleanupStep:
     def test_finds_and_removes_old(self, mock_ctx):
         # 7 backup sets (each with 1 file), retention is 5 -> remove 2 sets
         bdir = str(mock_ctx.config.backup_dir)
-        files = "\n".join(
-            f"{bdir}/test-project_files_2026050{i}_120000.tar.gz" for i in range(7)
-        )
+        files = "\n".join(f"{bdir}/test-project_files_2026050{i}_120000.tar.gz" for i in range(7))
         mock_ctx.ssh.run.side_effect = [
             ok(stdout=files),  # ls for all tar.gz
             ok(),  # rm file 0

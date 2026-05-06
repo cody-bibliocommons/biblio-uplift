@@ -20,7 +20,9 @@ class JournaldConfigTool(Tool):
     read_only = False
 
     def dry_run(self, ssh: SSHRunner, config: ProjectConfig, out: Callable[[str], None]) -> ToolResult:
-        r1 = ssh.run("grep SystemMaxUse /etc/systemd/journald.conf 2>/dev/null || echo 'not set'", timeout=10)
+        r1 = ssh.run(
+            "bash -c \"grep SystemMaxUse /etc/systemd/journald.conf 2>/dev/null || echo 'not set'\"", timeout=10
+        )
         r2 = ssh.run("journalctl --disk-usage", timeout=10)
         output = f"Current setting: {r1.stdout.strip()}\n{r2.stdout.strip()}\nWould set: SystemMaxUse={TARGET_SIZE}"
         out(output)
@@ -64,7 +66,7 @@ class ForceLogrotateTool(Tool):
         check = ssh.run("which logrotate", timeout=10)
         if not check.ok:
             return ToolResult(success=False, error="logrotate is not installed on this system")
-        result = ssh.run("logrotate -d /etc/logrotate.conf 2>&1 | head -30", timeout=30)
+        result = ssh.run("bash -c 'logrotate -d /etc/logrotate.conf 2>&1 | head -30'", timeout=30)
         out(result.stdout)
         return ToolResult(success=result.ok, output=result.stdout, error=result.stderr)
 
@@ -98,12 +100,12 @@ class FixPermissionsTool(Tool):
         r = ssh.run(f"stat -c '%U:%G %a' {project_dir}")
         if r.ok:
             out(f"  Current: {r.stdout.strip()}")
-        r = ssh.run(f"stat -c '%U:%G %a' {project_dir}/.git/objects 2>/dev/null")
+        r = ssh.run(f"bash -c 'stat -c \"%U:%G %a\" {project_dir}/.git/objects 2>/dev/null'")
         if r.ok:
             out(f"  .git/objects: {r.stdout.strip()}")
         out("  Would set: group=docker, g+rwX recursively")
         for key_dir in ["/opt/bitbucket", "/opt/docker/bitbucket"]:
-            r = ssh.run(f"test -d {key_dir} && stat -c '%a' {key_dir}/id_ed25519 2>/dev/null")
+            r = ssh.run(f"bash -c 'test -d {key_dir} && stat -c \"%a\" {key_dir}/id_ed25519 2>/dev/null'")
             if r.ok and r.stdout.strip():
                 out(f"  SSH key {key_dir}/id_ed25519: mode {r.stdout.strip()} → would set 600")
         return ToolResult(success=True)
@@ -121,7 +123,7 @@ class FixPermissionsTool(Tool):
             out("  Group write enabled")
 
         for key_dir in ["/opt/bitbucket", "/opt/docker/bitbucket"]:
-            ssh.run(f"test -d {key_dir} && chmod 600 {key_dir}/id_ed25519 2>/dev/null")
+            ssh.run(f"bash -c 'test -d {key_dir} && chmod 600 {key_dir}/id_ed25519 2>/dev/null'")
 
         r = ssh.run(f"stat -c '%U:%G %a' {project_dir}")
         if r.ok:

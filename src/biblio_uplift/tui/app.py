@@ -19,6 +19,7 @@ SECTIONS = [
     ("config", "Config Editor"),
     ("history", "History"),
     ("tools", "Tools"),
+    ("about", "About"),
 ]
 
 
@@ -37,6 +38,7 @@ class UpgradeApp(App):
         Binding("6", "switch_section('config')", "Config", show=False),
         Binding("7", "switch_section('history')", "History", show=False),
         Binding("8", "switch_section('tools')", "Tools", show=False),
+        Binding("9", "switch_section('about')", "About", show=False),
     ]
 
     def __init__(self, debug: bool = False, **kwargs):
@@ -46,6 +48,7 @@ class UpgradeApp(App):
     def on_mount(self) -> None:
         if not logging.getLogger().handlers:
             from biblio_uplift.cli.main import setup_logging
+
             setup_logging(debug=self._debug)
 
     def compose(self) -> ComposeResult:
@@ -53,6 +56,7 @@ class UpgradeApp(App):
         with Horizontal(id="app-layout"):
             yield Sidebar(items=SECTIONS, title="Biblio Uplift", id="sidebar")
             with ContentSwitcher(id="content-switcher", initial="dashboard"):
+                from biblio_uplift.tui.screens.about import AboutPanel
                 from biblio_uplift.tui.screens.backups import BackupsPanel
                 from biblio_uplift.tui.screens.cleanup import CleanupPanel
                 from biblio_uplift.tui.screens.config_edit import ConfigPanel
@@ -70,6 +74,7 @@ class UpgradeApp(App):
                 yield ConfigPanel(id="config")
                 yield HistoryPanel(id="history")
                 yield ToolsPanel(id="tools")
+                yield AboutPanel(id="about")
         yield Footer()
 
     def action_switch_section(self, section_id: str) -> None:

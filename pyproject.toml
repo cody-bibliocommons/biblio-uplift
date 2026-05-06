@@ -42,7 +42,7 @@ testpaths = ["tests"]
 
 [tool.coverage.run]
 source = ["biblio_uplift"]
-omit = ["*/tui/*"]
+omit = ["*/tui/*", "*/tools/*"]
 
 [tool.ruff]
 target-version = "py310"

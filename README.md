@@ -1,9 +1,11 @@
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
-![Tests](https://img.shields.io/badge/tests-259%20passed-brightgreen)
+![Tests](https://img.shields.io/badge/tests-266%20passed-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-99%25-brightgreen)
 ![Security](https://img.shields.io/badge/security-bandit%20%7C%20pip--audit%20%7C%20gitleaks-green)
 ![License](https://img.shields.io/badge/license-internal-lightgrey)
 ![Version](https://img.shields.io/badge/version-0.1.0-blue)
+![Tools](https://img.shields.io/badge/tools-18-blue)
+![TUI](https://img.shields.io/badge/TUI-Textual-purple)
 
 # biblio-uplift
 
@@ -49,9 +51,41 @@ biblio-uplift run-all --non-interactive
 # List available backups
 biblio-uplift backup list itops-vaultwarden
 
+# Update a single service (pull repo + recreate)
+biblio-uplift service-update itops-identity03 haproxy
+
+# Check/upgrade Docker Compose install method
+biblio-uplift tool run itops-vaultwarden compose-version
+
+# List available tools
+biblio-uplift tool list
+
+# Run a tool against a project
+biblio-uplift tool run itops-vaultwarden pending-security-updates
+
+# Manage configs
+biblio-uplift config edit itops-vaultwarden
+biblio-uplift config validate itops-vaultwarden
+biblio-uplift config create my-project --host myhost.example.com --project-dir /opt/docker/my-project
+biblio-uplift config delete my-project
+
 # View history
 biblio-uplift history --last 10
 ```
+
+## Screenshots
+
+### Dashboard
+
+![Dashboard](docs/screenshots/dashboard.svg)
+
+### Upgrade Pipeline
+
+![Upgrade](docs/screenshots/upgrade.svg)
+
+### Tools
+
+![Tools](docs/screenshots/tools.svg)
 
 ## Configuration
 
@@ -135,6 +169,8 @@ On failure, completed steps are rolled back in reverse order (docker down → do
 1. **Docker cleanup** — Prune stopped containers, dangling images, unused volumes, build cache
 1. **Log cleanup** — Truncate configured log files, vacuum journald
 
+Set `aggressive_prune: true` in the cleanup config to remove *all* unused images (not just dangling) during cleanup.
+
 ## TUI
 
 Running `biblio-uplift` with no command launches the interactive terminal UI. It has 8 panels:
@@ -188,6 +224,17 @@ backup list PROJECT:
   List available backups for a project.
   No options.
 
+service-update PROJECT SERVICE:
+  Pull repo and recreate a single service.
+  --non-interactive    Skip confirmation prompts
+
+tool list:
+  List available tools by category.
+
+tool run PROJECT TOOL_NAME:
+  --dry-run            Preview what would happen
+  --non-interactive    Skip confirmation prompts
+
 run-all:
   --non-interactive    Skip confirmation prompts
   --skip-reboot        Skip the reboot step
@@ -203,8 +250,12 @@ config:
     --project-dir TEXT   Remote project directory (required)
     --ssh-user TEXT      SSH username
     --ssh-key TEXT       Path to SSH key
+  config edit PROJECT  Open config in $EDITOR
   config validate PROJECT
                        Validate config by testing SSH, Docker, and paths
+  config delete PROJECT
+                       Delete a project configuration
+    --non-interactive    Skip confirmation prompts
 
 history:
   --project TEXT       Filter by project
@@ -248,7 +299,7 @@ For unattended runs:
 ## Development
 
 ```bash
-pip install -e .
+pipx install --force .
 biblio-uplift --debug run itops-vaultwarden --dry-run
 ```
 

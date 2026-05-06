@@ -58,9 +58,24 @@ class DockerCleanupStep(PipelineStep):
         if cleanup.prune_containers:
             prune_commands.append(("docker container prune -f", "Containers pruned"))
         if cleanup.prune_images:
-            prune_commands.append(("docker image prune -f", "Images pruned"))
+            # Failsafe: only prune images if containers are running
+            from biblio_uplift.core.steps.docker import _bash_compose
+
+            check_cmd = _bash_compose(ctx.config, "ps -q")
+            running = ctx.ssh.run(check_cmd)
+            if running.ok and running.stdout.strip():
+                if cleanup.aggressive_prune:
+                    prune_commands.append(("docker image prune -af", "All unused images pruned"))
+                else:
+                    prune_commands.append(("docker image prune -f", "Dangling images pruned"))
+            else:
+                if ctx.on_output:
+                    ctx.on_output("[yellow]Skipping image prune: containers not running (failsafe)[/yellow]")
         if cleanup.prune_volumes:
-            prune_commands.append(("docker volume prune -f --filter 'label!=keep'", "Volumes pruned"))
+            if cleanup.aggressive_prune:
+                prune_commands.append(("docker volume prune -f", "All anonymous/orphaned volumes pruned"))
+            else:
+                prune_commands.append(("docker volume prune -f --filter 'label!=keep'", "Volumes pruned (label!=keep)"))
         if cleanup.prune_build_cache:
             prune_commands.append(("docker builder prune -af", "Build cache pruned"))
 
@@ -98,14 +113,21 @@ class DockerCleanupStep(PipelineStep):
                 out(f"  Stopped containers to remove: {r.stdout.strip()}")
 
         if config.cleanup.prune_images:
-            r = ctx.ssh.run('docker images --filter dangling=true --format "{{.Repository}}:{{.Tag}}" | wc -l')
-            if r.ok:
-                out(f"  Dangling images to remove: {r.stdout.strip()}")
-            r = ctx.ssh.run('docker system df --format "{{.Type}}\t{{.Reclaimable}}"')
-            if r.ok:
-                out("  Reclaimable space:")
-                for line in r.stdout.strip().splitlines():
-                    out(f"    {line}")
+            from biblio_uplift.core.steps.docker import _bash_compose
+
+            check_cmd = _bash_compose(config, "ps -q")
+            running = ctx.ssh.run(check_cmd)
+            if running.ok and running.stdout.strip():
+                r = ctx.ssh.run('docker images --filter dangling=true --format "{{.Repository}}:{{.Tag}}" | wc -l')
+                if r.ok:
+                    out(f"  Dangling images to remove: {r.stdout.strip()}")
+                r = ctx.ssh.run('docker system df --format "{{.Type}}\t{{.Reclaimable}}"')
+                if r.ok:
+                    out("  Reclaimable space:")
+                    for line in r.stdout.strip().splitlines():
+                        out(f"    {line}")
+            else:
+                out("  [yellow]Image prune would be skipped: containers not running[/yellow]")
 
         if config.cleanup.prune_volumes:
             r = ctx.ssh.run("docker volume ls --filter dangling=true --format '{{.Name}}' | wc -l")
@@ -117,7 +139,7 @@ class DockerCleanupStep(PipelineStep):
             if r.ok and r.stdout.strip():
                 out(f"  Build cache to clear: {r.stdout.strip()}")
 
-        r = ctx.ssh.run('docker system df')
+        r = ctx.ssh.run("docker system df")
         if r.ok:
             out("")
             out("  Current Docker disk usage:")
@@ -167,7 +189,7 @@ class LogCleanupStep(PipelineStep):
         r = ctx.ssh.run(f"journalctl --vacuum-time={days}d 2>&1")
         if r.ok:
             for line in r.stdout.strip().splitlines():
-                if 'freed' in line.lower() or 'vacuuming' in line.lower() or 'archived' in line.lower():
+                if "freed" in line.lower() or "vacuuming" in line.lower() or "archived" in line.lower():
                     out(f"  {line.strip()}")
 
         # 4. Clean apt cache
@@ -181,7 +203,7 @@ class LogCleanupStep(PipelineStep):
         r = ctx.ssh.run(f"find /tmp -type f -mtime +{days} -delete -print 2>/dev/null | wc -l")
         if r.ok:
             count = r.stdout.strip()
-            if count != '0':
+            if count != "0":
                 out(f"  Removed {count} tmp files")
 
         # Run custom cleanup commands

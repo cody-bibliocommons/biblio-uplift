@@ -164,6 +164,7 @@ class CleanupPanel(Widget):
                         w.update(f"  {STATUS_ICONS[step.status]} {step.name}")
                     except Exception:
                         pass
+
                 self.app.call_from_thread(_update)
 
             ctx = PipelineContext(
@@ -199,6 +200,4 @@ class CleanupPanel(Widget):
         except Exception as e:
             logger.error("Worker crashed: %s", e, exc_info=True)
             with contextlib.suppress(Exception):
-                self.app.call_from_thread(
-                    self._write_output, [f"[bold red]Worker error: {e}[/bold red]"]
-                )
+                self.app.call_from_thread(self._write_output, [f"[bold red]Worker error: {e}[/bold red]"])
