@@ -30,115 +30,100 @@ QUOTES = [
     '"Have you checked the logs?" — The answer to everything',
 ]
 
-TITLE = "[bold]Biblio[/bold] [bold italic]UPLIFT[/bold italic]"
+TITLE = (
+    "[bold cyan]╔══════════════════════════════════════════╗[/]\n"
+    "[bold cyan]║[/]  [bold white]██████  ██ ██████  ██      ██  ██████[/]   [bold cyan]║[/]\n"
+    "[bold cyan]║[/]  [bold white]██   █  ██ ██   █  ██      ██  ██   █[/]   [bold cyan]║[/]\n"
+    "[bold cyan]║[/]  [bold white]██████  ██ ██████  ██      ██  ██   █[/]   [bold cyan]║[/]\n"
+    "[bold cyan]║[/]  [bold white]██   █  ██ ██   █  ██      ██  ██   █[/]   [bold cyan]║[/]\n"
+    "[bold cyan]║[/]  [bold white]██████  ██ ██████  ██████  ██  ██████[/]   [bold cyan]║[/]\n"
+    "[bold cyan]║[/]                                          [bold cyan]║[/]\n"
+    "[bold cyan]║[/]             [bold yellow]U  P  L  I  F  T[/]             [bold cyan]║[/]\n"
+    "[bold cyan]╚══════════════════════════════════════════╝[/]"
+)
 
-BLACK_MAGE_FRAMES = [
-    (
-        "[yellow]         ▄         [/]\n"
-        "[yellow]        ███        [/]\n"
-        "[yellow]       █████       [/]\n"
-        "[yellow]      ███████      [/]\n"
-        "[yellow]     █████████     [/]\n"
-        "[dim]     █████████     [/]\n"
-        "[dim]     ██[/][yellow]█[/][dim]███[/][yellow]█[/][dim]██     [/]\n"
-        "[dim]     █████████     [/]\n"
-        "[blue]      ███████      [/]\n"
-        "[blue]     █████████     [/]\n"
-        "[blue]    ███████████    [/]\n"
-        "[blue]   █████████████   [/]\n"
-        "[blue]   █████████████   [/]\n"
-        "[blue]   █████████████   [/]\n"
-        "[blue]   ██████ ██████   [/]\n"
-        "[blue]   ████     ████   [/]\n"
-        "[blue]   ███       ███   [/]\n"
-        "[dim]   ▄▄▄       ▄▄▄   [/]\n"
-        "[dim]  █████     █████  [/]\n"
-        "[dim]  ▀▀▀▀▀     ▀▀▀▀▀  [/]"
-    ),
-    (
-        "[yellow]         ▄         [/]\n"
-        "[yellow]        ███        [/]\n"
-        "[yellow]       █████       [/]\n"
-        "[yellow]      ███████      [/]\n"
-        "[yellow]     █████████     [/]\n"
-        "[dim]     █████████     [/]\n"
-        "[dim]     ██[/][yellow]█[/][dim]███[/][yellow]█[/][dim]██     [/]\n"
-        "[dim]     █████████     [/]\n"
-        "[yellow]★[/]    [blue]███████[/]    [yellow]★[/]\n"
-        "[blue] ██  ███████  ██ [/]\n"
-        "[blue]  █  ███████  █  [/]\n"
-        "[blue]   █████████████   [/]\n"
-        "[blue]   █████████████   [/]\n"
-        "[blue]   █████████████   [/]\n"
-        "[blue]   ██████ ██████   [/]\n"
-        "[blue]   ████     ████   [/]\n"
-        "[blue]   ███       ███   [/]\n"
-        "[dim]   ▄▄▄       ▄▄▄   [/]\n"
-        "[dim]  █████     █████  [/]\n"
-        "[dim]  ▀▀▀▀▀     ▀▀▀▀▀  [/]"
-    ),
-    (
-        "\n"
-        "\n"
-        "[yellow]         ▄         [/]\n"
-        "[yellow]        ███        [/]\n"
-        "[yellow]       █████       [/]\n"
-        "[yellow]      ███████      [/]\n"
-        "[yellow]     █████████     [/]\n"
-        "[dim]     █████████     [/]\n"
-        "[dim]     ██[/][yellow]█[/][dim]███[/][yellow]█[/][dim]██     [/]\n"
-        "[dim]     █████████     [/]\n"
-        "[yellow]★[/]    [blue]███████[/]    [yellow]★[/]\n"
-        "[blue] ██  ███████  ██ [/]\n"
-        "[blue]  █  ███████  █  [/]\n"
-        "[blue]   █████████████   [/]\n"
-        "[blue]    ███████████    [/]\n"
-        "[blue]     █████████     [/]\n"
-        "[blue]      ███████      [/]\n"
-        "[blue]       ▀▀▀▀▀       [/]\n"
-        "                     \n"
-        "                     "
-    ),
-    (
-        "[yellow]         ▄         [/]\n"
-        "[yellow]        ███        [/]\n"
-        "[yellow]       █████       [/]\n"
-        "[yellow]      ███████      [/]\n"
-        "[yellow]     █████████     [/]\n"
-        "[dim]     █████████     [/]\n"
-        "[dim]     ██[/][yellow]█[/][dim]███[/][yellow]█[/][dim]██     [/]\n"
-        "[dim]     █████████     [/]\n"
-        "[blue]      ███████      [/]\n"
-        "[blue]     █████████     [/]\n"
-        "[blue]    ███████████[/][yellow]✦✦✦[/]\n"
-        "[blue]   █████████████[/][yellow] ✦✦[/]\n"
-        "[blue]   █████████████[/][yellow]  ✦[/]\n"
-        "[blue]   █████████████   [/]\n"
-        "[blue]   ██████ ██████   [/]\n"
-        "[blue]   ████     ████   [/]\n"
-        "[blue]   ███       ███   [/]\n"
-        "[dim]   ▄▄▄       ▄▄▄   [/]\n"
-        "[dim]  █████     █████  [/]\n"
-        "[dim]  ▀▀▀▀▀     ▀▀▀▀▀  [/]"
-    ),
-]
+ROWS = 30
+COLS = 80
+FAR_STARS = 25
+NEAR_STARS = 15
+FAR_CHARS = ["·", ".", "⋆"]
+NEAR_CHARS = ["✦", "★", "✧", "☆", "*"]
+
+
+class Starfield:
+    """Parallax scrolling starfield with far (dim/slow) and near (bright/fast) layers."""
+
+    def __init__(self):
+        # Each star: [row, col, char, is_near]
+        self._stars: list[list] = []
+        for _ in range(FAR_STARS):
+            self._stars.append(
+                [
+                    random.randint(0, ROWS - 1),  # noqa: S311
+                    random.randint(0, COLS - 1),  # noqa: S311
+                    random.choice(FAR_CHARS),  # noqa: S311
+                    False,
+                ]
+            )
+        for _ in range(NEAR_STARS):
+            self._stars.append(
+                [
+                    random.randint(0, ROWS - 1),  # noqa: S311
+                    random.randint(0, COLS - 1),  # noqa: S311
+                    random.choice(NEAR_CHARS),  # noqa: S311
+                    True,
+                ]
+            )
+        self._tick = 0
+
+    def tick(self) -> None:
+        self._tick += 1
+        for star in self._stars:
+            # Near stars move every tick; far stars move every 2 ticks
+            if star[3] or self._tick % 2 == 0:
+                star[1] -= 1
+            # Wrap around: reappear on right at random row
+            if star[1] < 0:
+                star[1] = COLS - 1
+                star[0] = random.randint(0, ROWS - 1)  # noqa: S311
+
+    def render(self) -> str:
+        grid = [[" "] * COLS for _ in range(ROWS)]
+        markup = [[None] * COLS for _ in range(ROWS)]
+        for star in self._stars:
+            r, c = star[0], star[1]
+            grid[r][c] = star[2]
+            if star[3]:
+                markup[r][c] = random.choice(["yellow", "bright_white", "white"])  # noqa: S311
+            else:
+                markup[r][c] = "dim"
+        lines = []
+        for r in range(ROWS):
+            line = ""
+            for c in range(COLS):
+                if grid[r][c] == " ":
+                    line += " "
+                else:
+                    line += f"[{markup[r][c]}]{grid[r][c]}[/]"
+            lines.append(line)
+        return "\n".join(lines)
 
 
 class AboutPanel(Widget):
     DEFAULT_CSS = """
     AboutPanel { width: 1fr; height: 1fr; layout: vertical; padding: 1; }
-    #about-logo { color: $primary; height: auto; text-style: bold; content-align: center middle; text-align: center; padding: 1 0; }
+    #about-logo { color: $primary; height: auto; content-align: center middle; text-align: center; padding: 0; }
     #about-info { height: auto; padding: 1 0; }
     #about-clock { text-align: right; color: $success; height: auto; }
     #about-quote { color: $warning; text-style: italic; height: auto; padding: 1 0; border: solid $primary-darken-2; margin: 1 0; }
     #about-ack { height: auto; color: $text-muted; }
-    #about-mage { height: 22; content-align: center middle; text-align: center; }
+    #about-stars { height: 1fr; content-align: center middle; overflow: hidden; }
     """
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._timer: Timer | None = None
-        self._mage_frame = 0
+        self._starfield = Starfield()
         self._tick_count = 0
 
     def compose(self) -> ComposeResult:
@@ -147,23 +132,23 @@ class AboutPanel(Widget):
         yield Static("", id="about-info")
         yield Static("", id="about-quote")
         yield Static("", id="about-ack")
-        yield Static(BLACK_MAGE_FRAMES[0], id="about-mage", markup=True)
+        yield Static(self._starfield.render(), id="about-stars", markup=True)
 
     def on_mount(self) -> None:
         self._update_info()
         self._update_clock()
-        self._timer = self.set_interval(0.5, self._tick)
+        self._timer = self.set_interval(0.3, self._tick)
 
     def _tick(self) -> None:
         self._tick_count += 1
-        if self._tick_count % 2 == 0:
+        if self._tick_count % 3 == 0:
             self._update_clock()
-        self._animate_mage()
+        self._animate_stars()
 
-    def _animate_mage(self) -> None:
-        self._mage_frame = (self._mage_frame + 1) % len(BLACK_MAGE_FRAMES)
+    def _animate_stars(self) -> None:
+        self._starfield.tick()
         with contextlib.suppress(Exception):
-            self.query_one("#about-mage", Static).update(BLACK_MAGE_FRAMES[self._mage_frame])
+            self.query_one("#about-stars", Static).update(self._starfield.render())
 
     def _update_clock(self) -> None:
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")

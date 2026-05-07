@@ -7,6 +7,8 @@
 ![Tools](https://img.shields.io/badge/tools-18-blue)
 ![TUI](https://img.shields.io/badge/TUI-Textual-purple)
 
+![Biblio Uplift](docs/img/banner_211.png)
+
 # biblio-uplift
 
 TUI and CLI tool for upgrading Docker Compose-based services on remote servers via SSH.
