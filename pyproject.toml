@@ -78,6 +78,7 @@ ignore = []
 "src/biblio_uplift/core/ssh.py" = ["S603"]
 "src/biblio_uplift/core/pipeline.py" = ["S602"]
 "src/biblio_uplift/history/audit.py" = ["S608"]
+"src/biblio_uplift/settings.py" = ["S603", "S607"]
 
 [tool.mypy]
 python_version = "3.10"

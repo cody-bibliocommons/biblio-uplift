@@ -1034,3 +1034,57 @@ def tool_run(project, tool_name, dry_run, non_interactive):
     else:
         console.print(f"[red]Failed: {result.error}[/red]")
         raise SystemExit(1)
+
+
+@cli.group("settings")
+def settings_group() -> None:
+    """Manage user settings."""
+
+
+@settings_group.command("show")
+def settings_show() -> None:
+    """Show current settings."""
+    from biblio_uplift.settings import load_settings
+
+    settings = load_settings()
+    for key, value in sorted(settings.items()):
+        console.print(f"  {key}: {value}")
+
+
+@settings_group.command("set")
+@click.argument("key")
+@click.argument("value")
+def settings_set(key: str, value: str) -> None:
+    """Set a settings value (key value)."""
+    from biblio_uplift.settings import DEFAULTS, load_settings, save_settings
+
+    if key not in DEFAULTS:
+        console.print(f"[red]Unknown setting: {key}[/red]")
+        console.print(f"Available: {', '.join(sorted(DEFAULTS.keys()))}")
+        raise SystemExit(1)
+
+    settings = load_settings()
+    # Coerce type based on defaults
+    default_val = DEFAULTS[key]
+    if isinstance(default_val, bool):
+        settings[key] = value.lower() in ("true", "1", "yes")
+    elif isinstance(default_val, int):
+        try:
+            settings[key] = int(value)
+        except ValueError:
+            console.print(f"[red]Expected integer for {key}[/red]")
+            raise SystemExit(1) from None
+    else:
+        settings[key] = value
+
+    save_settings(settings)
+    console.print(f"[green]Set {key} = {settings[key]}[/green]")
+
+
+@cli.command()
+def sync() -> None:
+    """Sync config repo (clone or pull)."""
+    from biblio_uplift.settings import sync_config_repo
+
+    result = sync_config_repo()
+    console.print(result)

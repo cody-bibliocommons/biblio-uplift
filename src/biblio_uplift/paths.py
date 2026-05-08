@@ -44,3 +44,8 @@ def get_data_dir() -> Path:
 def get_examples_dir() -> Path:
     """Return path to bundled example configs (inside the installed package)."""
     return Path(__file__).parent / "examples"
+
+
+def get_settings_path() -> Path:
+    """Return path to user settings JSON file."""
+    return Path.home() / ".config" / "biblio-uplift" / "settings.json"
