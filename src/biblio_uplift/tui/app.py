@@ -1,5 +1,6 @@
 import logging
 
+from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal
@@ -20,6 +21,7 @@ SECTIONS = [
     ("history", "History"),
     ("tools", "Tools"),
     ("about", "About"),
+    ("settings", "Settings"),
 ]
 
 
@@ -39,6 +41,7 @@ class UpgradeApp(App):
         Binding("7", "switch_section('history')", "History", show=False),
         Binding("8", "switch_section('tools')", "Tools", show=False),
         Binding("9", "switch_section('about')", "About", show=False),
+        Binding("0", "switch_section('settings')", "Settings", show=False),
     ]
 
     def __init__(self, debug: bool = False, **kwargs):
@@ -50,6 +53,16 @@ class UpgradeApp(App):
             from biblio_uplift.cli.main import setup_logging
 
             setup_logging(debug=self._debug)
+        self._maybe_sync_on_launch()
+
+    @work(thread=True)
+    def _maybe_sync_on_launch(self) -> None:
+        from biblio_uplift.settings import load_settings, sync_config_repo
+
+        settings = load_settings()
+        if settings.get("config_sync_on_launch"):
+            logger.info("Auto-syncing config repo on launch")
+            sync_config_repo(settings)
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -63,6 +76,7 @@ class UpgradeApp(App):
                 from biblio_uplift.tui.screens.dashboard import DashboardPanel
                 from biblio_uplift.tui.screens.history import HistoryPanel
                 from biblio_uplift.tui.screens.server_status import ServerStatusPanel
+                from biblio_uplift.tui.screens.settings import SettingsPanel
                 from biblio_uplift.tui.screens.tools import ToolsPanel
                 from biblio_uplift.tui.screens.upgrade import UpgradePanel
 
@@ -75,6 +89,7 @@ class UpgradeApp(App):
                 yield HistoryPanel(id="history")
                 yield ToolsPanel(id="tools")
                 yield AboutPanel(id="about")
+                yield SettingsPanel(id="settings")
         yield Footer()
 
     def action_switch_section(self, section_id: str) -> None:

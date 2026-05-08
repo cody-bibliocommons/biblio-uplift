@@ -19,13 +19,22 @@ class ProjectConfig(BaseModel):
     name: str
     ssh_host: str
     ssh_user: str = "ansible"
-    ssh_key: Path = Path("~/.ssh/integration.pem")
+    ssh_key: Path = Path("~/.ssh/id_ed25519")
     sudo: bool = True
 
     project_dir: Path
     compose_files: list[str] = Field(default_factory=lambda: ["docker-compose.yml"])
     compose_profile: str | None = None  # "hostname" = resolve on remote, or literal
     compose_command: str = "docker compose"
+    package_manager: str = "apt"
+
+    @field_validator("package_manager")
+    @classmethod
+    def validate_package_manager(cls, v: str) -> str:
+        allowed = {"apt", "dnf", "yum", "apk"}
+        if v not in allowed:
+            raise ValueError(f"package_manager must be one of {allowed}")
+        return v
 
     @field_validator("compose_command")
     @classmethod
@@ -88,6 +97,7 @@ class ProjectConfig(BaseModel):
     on_success_cmd: str | None = None
 
     ssh_port: int = 22
+    git_host: str | None = None
 
     git_branch: str | None = None
     maintenance_window: str | None = None  # e.g. "02:00-06:00" or None for anytime

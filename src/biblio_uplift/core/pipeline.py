@@ -81,18 +81,13 @@ class Pipeline:
         self.end_time: float | None = None
         self._lock_file: Any = None
 
-    def _acquire_lock(self, config) -> bool:
-        lock_path = Path(tempfile.gettempdir()) / f"biblio-uplift-{config.name}.lock"
+    def _try_lock(self, lock_fd) -> bool:
         try:
-            self._lock_file = open(lock_path, "w")
-            fcntl.flock(self._lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            self._lock_file.write(str(os.getpid()))
-            self._lock_file.flush()
+            fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            lock_fd.write(str(os.getpid()))
+            lock_fd.flush()
             return True
         except OSError:
-            if self._lock_file:
-                self._lock_file.close()
-                self._lock_file = None
             return False
 
     def _release_lock(self):
@@ -112,12 +107,17 @@ class Pipeline:
 
     def run(self, ctx: PipelineContext) -> bool:
         """Run all steps. Returns True if all succeeded/skipped."""
-        if not self._acquire_lock(ctx.config):
-            logger.error("Another upgrade is already running for %s", ctx.config.name)
-            if ctx.on_output:
-                ctx.on_output(f"ERROR: Another upgrade is already running for {ctx.config.name}")
-            return False
+        lock_path = Path(tempfile.gettempdir()) / f"biblio-uplift-{ctx.config.name}.lock"
+        with open(lock_path, "w") as lock_fd:
+            if not self._try_lock(lock_fd):
+                logger.error("Another upgrade is already running for %s", ctx.config.name)
+                if ctx.on_output:
+                    ctx.on_output(f"ERROR: Another upgrade is already running for {ctx.config.name}")
+                return False
+            self._lock_file = lock_fd
+            return self._run_steps(ctx)
 
+    def _run_steps(self, ctx: PipelineContext) -> bool:
         self.start_time = time.monotonic()
         success = True
         failure_hook_fired = False
@@ -207,7 +207,6 @@ class Pipeline:
             self.end_time = time.monotonic()
             if success and hasattr(ctx.config, "on_success_cmd") and ctx.config.on_success_cmd:
                 self._fire_notification(ctx.config.on_success_cmd, ctx)
-            self._release_lock()
         return success
 
     def _fire_failure_hook(self, ctx: PipelineContext) -> None:

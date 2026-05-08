@@ -180,22 +180,16 @@ def test_config_validate_key_not_found(runner, config_dir):
 
 
 def test_history_no_entries(runner, tmp_path, monkeypatch):
-    import biblio_uplift.paths
 
-    monkeypatch.setattr(biblio_uplift.paths, "_project_root", None)
-    monkeypatch.setenv("ITOPS_UPGRADE_DIR", str(tmp_path))
+    monkeypatch.setenv("BIBLIO_UPLIFT_DATA_DIR", str(tmp_path))
     result = runner.invoke(cli, ["history"])
     assert result.exit_code == 0
     assert "No history found" in result.output
 
 
 def test_history_with_entries(runner, tmp_path, monkeypatch):
-    import biblio_uplift.paths
 
-    monkeypatch.setattr(biblio_uplift.paths, "_project_root", None)
-    monkeypatch.setenv("ITOPS_UPGRADE_DIR", str(tmp_path))
-    logs = tmp_path / "logs"
-    logs.mkdir()
+    monkeypatch.setenv("BIBLIO_UPLIFT_DATA_DIR", str(tmp_path))
     entry = {
         "timestamp": "2026-01-01T00:00:00Z",
         "project": "proj",
@@ -203,7 +197,7 @@ def test_history_with_entries(runner, tmp_path, monkeypatch):
         "success": True,
         "duration_seconds": 42.0,
     }
-    (logs / "history.jsonl").write_text(json.dumps(entry) + "\n")
+    (tmp_path / "history.jsonl").write_text(json.dumps(entry) + "\n")
     result = runner.invoke(cli, ["history"])
     assert result.exit_code == 0
     assert "proj" in result.output
@@ -211,17 +205,13 @@ def test_history_with_entries(runner, tmp_path, monkeypatch):
 
 
 def test_history_filter_by_project(runner, tmp_path, monkeypatch):
-    import biblio_uplift.paths
 
-    monkeypatch.setattr(biblio_uplift.paths, "_project_root", None)
-    monkeypatch.setenv("ITOPS_UPGRADE_DIR", str(tmp_path))
-    logs = tmp_path / "logs"
-    logs.mkdir()
+    monkeypatch.setenv("BIBLIO_UPLIFT_DATA_DIR", str(tmp_path))
     entries = [
         json.dumps({"timestamp": "t1", "project": "a", "pipeline": "upgrade", "success": True, "duration_seconds": 1}),
         json.dumps({"timestamp": "t2", "project": "b", "pipeline": "upgrade", "success": False, "duration_seconds": 2}),
     ]
-    (logs / "history.jsonl").write_text("\n".join(entries) + "\n")
+    (tmp_path / "history.jsonl").write_text("\n".join(entries) + "\n")
     result = runner.invoke(cli, ["history", "--project", "a"])
     assert "a" in result.output
 
@@ -230,10 +220,8 @@ def test_history_filter_by_project(runner, tmp_path, monkeypatch):
 
 
 def test_run_non_interactive_dry_run(runner, config_dir, tmp_path, monkeypatch):
-    import biblio_uplift.paths
 
-    monkeypatch.setattr(biblio_uplift.paths, "_project_root", None)
-    monkeypatch.setenv("ITOPS_UPGRADE_DIR", str(tmp_path))
+    monkeypatch.setenv("BIBLIO_UPLIFT_DATA_DIR", str(tmp_path))
 
     mock_ssh = MagicMock()
     mock_pipeline = MagicMock()
@@ -256,10 +244,8 @@ def test_run_non_interactive_dry_run(runner, config_dir, tmp_path, monkeypatch):
 
 
 def test_run_with_skip_flags(runner, config_dir, tmp_path, monkeypatch):
-    import biblio_uplift.paths
 
-    monkeypatch.setattr(biblio_uplift.paths, "_project_root", None)
-    monkeypatch.setenv("ITOPS_UPGRADE_DIR", str(tmp_path))
+    monkeypatch.setenv("BIBLIO_UPLIFT_DATA_DIR", str(tmp_path))
 
     mock_ssh = MagicMock()
     mock_pipeline = MagicMock()
@@ -290,10 +276,8 @@ def test_run_with_skip_flags(runner, config_dir, tmp_path, monkeypatch):
 
 
 def test_run_failure_exits_nonzero(runner, config_dir, tmp_path, monkeypatch):
-    import biblio_uplift.paths
 
-    monkeypatch.setattr(biblio_uplift.paths, "_project_root", None)
-    monkeypatch.setenv("ITOPS_UPGRADE_DIR", str(tmp_path))
+    monkeypatch.setenv("BIBLIO_UPLIFT_DATA_DIR", str(tmp_path))
 
     mock_ssh = MagicMock()
     mock_pipeline = MagicMock()
@@ -319,10 +303,8 @@ def test_run_failure_exits_nonzero(runner, config_dir, tmp_path, monkeypatch):
 
 
 def test_cleanup_non_interactive(runner, config_dir, tmp_path, monkeypatch):
-    import biblio_uplift.paths
 
-    monkeypatch.setattr(biblio_uplift.paths, "_project_root", None)
-    monkeypatch.setenv("ITOPS_UPGRADE_DIR", str(tmp_path))
+    monkeypatch.setenv("BIBLIO_UPLIFT_DATA_DIR", str(tmp_path))
 
     mock_ssh = MagicMock()
     mock_pipeline = MagicMock()
@@ -379,10 +361,8 @@ def test_build_cleanup_pipeline():
 
 
 def test_setup_logging_default(tmp_path, monkeypatch):
-    import biblio_uplift.paths
 
-    monkeypatch.setattr(biblio_uplift.paths, "_project_root", None)
-    monkeypatch.setenv("ITOPS_UPGRADE_DIR", str(tmp_path))
+    monkeypatch.setenv("BIBLIO_UPLIFT_DATA_DIR", str(tmp_path))
     import logging
 
     logging.root.handlers.clear()
@@ -391,10 +371,8 @@ def test_setup_logging_default(tmp_path, monkeypatch):
 
 
 def test_setup_logging_debug(tmp_path, monkeypatch):
-    import biblio_uplift.paths
 
-    monkeypatch.setattr(biblio_uplift.paths, "_project_root", None)
-    monkeypatch.setenv("ITOPS_UPGRADE_DIR", str(tmp_path))
+    monkeypatch.setenv("BIBLIO_UPLIFT_DATA_DIR", str(tmp_path))
     import logging
 
     logging.root.handlers.clear()
@@ -570,8 +548,7 @@ def test_run_all_unknown_project(runner, monkeypatch, tmp_path):
 
 
 def test_resume_no_state(runner, monkeypatch, tmp_path):
-    monkeypatch.setattr("biblio_uplift.core.state.get_project_root", lambda: tmp_path)
-    (tmp_path / "logs").mkdir(exist_ok=True)
+    monkeypatch.setattr("biblio_uplift.core.state.get_data_dir", lambda: tmp_path)
     result = runner.invoke(cli, ["resume"])
     assert "No resume state" in result.output
 
@@ -618,7 +595,7 @@ def test_config_dir(monkeypatch, tmp_path):
     monkeypatch.setattr("biblio_uplift.config.loader.get_config_dir", lambda: cfg_dir)
     logs = tmp_path / "logs"
     logs.mkdir(exist_ok=True)
-    monkeypatch.setattr("biblio_uplift.history.audit._get_history_path", lambda: logs / "history.jsonl")
+    monkeypatch.setenv("BIBLIO_UPLIFT_DATA_DIR", str(logs))
     return cfg_dir
 
 
@@ -1142,11 +1119,10 @@ def test_config_delete_not_found(runner, test_config_dir):
 
 def test_config_edit_success(runner, test_config_dir, monkeypatch):
     """Cover config edit happy path."""
-    monkeypatch.setenv("EDITOR", "true")  # 'true' command does nothing
-    with patch("subprocess.call", return_value=0) as mock_call:
+    with patch("click.edit", return_value=None) as mock_edit:
         result = runner.invoke(cli, ["config", "edit", "test-proj"])
         assert result.exit_code == 0
-        mock_call.assert_called_once()
+        mock_edit.assert_called_once()
 
 
 def test_config_edit_not_found(runner, test_config_dir):
@@ -1194,7 +1170,7 @@ def test_service_update_git_pull_fails(runner, mock_ssh_class, test_config_dir, 
     mock_ssh_class.run.side_effect = fake_run
     result = runner.invoke(cli, ["service-update", "test-proj", "web", "--non-interactive"])
     assert result.exit_code == 1
-    assert "Git pull failed" in result.output
+    assert "Git fetch failed" in result.output
 
 
 # --- backup prune (lines 882-938) ---

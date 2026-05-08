@@ -371,10 +371,7 @@ class UpdateServiceTool(Tool):
             out(f"  [yellow]Image pull warning: {r.stderr}[/yellow]")
 
         # Recreate
-        if target:
-            up_arg = f"up -d --no-deps --force-recreate {shlex.quote(target)}"
-        else:
-            up_arg = "up -d --force-recreate"
+        up_arg = f"up -d --no-deps --force-recreate {shlex.quote(target)}" if target else "up -d --force-recreate"
         out("Recreating...")
         r = ssh.run(_bash_compose(config, up_arg), timeout=120)
         if r.ok:

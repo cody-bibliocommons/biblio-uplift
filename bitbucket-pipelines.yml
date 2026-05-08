@@ -23,7 +23,7 @@ definitions:
         caches:
           - pip
         script:
-          - pip install ruff
+          - pip install ruff==0.15.12
           - ruff check src/ tests/
           - ruff format --check src/ tests/
 

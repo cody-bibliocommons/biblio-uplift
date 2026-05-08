@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import tempfile
 
 from textual import on, work
 from textual.app import ComposeResult
@@ -167,7 +168,7 @@ class ServerStatusPanel(Widget):
         # Disk Usage Breakdown
         out("")
         out("[bold]Disk Usage Breakdown:[/bold]")
-        for d in ["/var/log", "/var/cache", "/tmp", str(config.project_dir)]:  # nosec B108
+        for d in ["/var/log", "/var/cache", tempfile.gettempdir(), str(config.project_dir)]:
             r = ssh.run(f"du -sh {shlex.quote(d)} 2>/dev/null")
             if r.ok and r.stdout.strip():
                 out(f"  {r.stdout.strip()}")

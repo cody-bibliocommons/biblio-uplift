@@ -65,13 +65,11 @@ class UpgradePanel(Widget):
 
     def on_select_changed(self, event: Select.Changed) -> None:
         if event.select.id == "upgrade-project" and event.value != Select.NULL:
-            try:
+            with contextlib.suppress(Exception):
                 log = self.query_one("#upgrade-log", RichLog)
                 log.clear()
                 log.write(f"Selected: [bold]{event.value}[/bold]")
                 log.write("Configure options and click Run Upgrade.")
-            except Exception:
-                pass
 
     @on(Button.Pressed, "#btn-run-upgrade")
     def handle_run(self, event: Button.Pressed) -> None:
@@ -112,22 +110,18 @@ class UpgradePanel(Widget):
 
     def _append_line(self, line: str) -> None:
         """Append a single line to the log widget. Must be called from main thread."""
-        try:
+        with contextlib.suppress(Exception):
             log = self.query_one("#upgrade-log", RichLog)
             log.write(line)
-        except Exception:
-            pass
 
     def on_checkbox_changed(self, event: Checkbox.Changed) -> None:
         if self._task_active:
             return
-        try:
+        with contextlib.suppress(Exception):
             log = self.query_one("#upgrade-log", RichLog)
             label = event.checkbox.label
             state = "enabled" if event.value else "disabled"
             log.write(f"{label}: {state}")
-        except Exception:
-            pass
 
     @work(thread=True)
     def _start_upgrade(self, project_name: str, skip_reboot: bool, skip_os: bool, dry_run: bool) -> None:
@@ -223,11 +217,9 @@ class UpgradePanel(Widget):
                 self.app.call_from_thread(self._write_output, [f"[bold red]Worker error: {e}[/bold red]"])
 
     def _update_step(self, name: str, icon: str, status: str) -> None:
-        try:
+        with contextlib.suppress(Exception):
             w = self.query_one(f"#ustep-{name}", Static)
             w.update(f"  {icon} {name}")
-        except Exception:
-            pass
 
     def _set_running_state(self, running: bool) -> None:
         self.query_one("#btn-run-upgrade", Button).disabled = running

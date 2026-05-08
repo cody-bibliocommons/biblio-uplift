@@ -3,6 +3,26 @@ from __future__ import annotations
 from biblio_uplift.core.pipeline import PipelineContext, PipelineStep, StepResult, StepStatus
 from biblio_uplift.core.state import save_resume_state
 
+PACKAGE_MANAGER_COMMANDS: dict[str, list[tuple[str, int]]] = {
+    "apt": [
+        ("apt-get update", 120),
+        ("DEBIAN_FRONTEND=noninteractive apt-get upgrade -y", 600),
+        ("apt-get autoremove --purge -y", 120),
+    ],
+    "dnf": [
+        ("dnf upgrade -y", 600),
+        ("dnf autoremove -y", 120),
+    ],
+    "yum": [
+        ("yum update -y", 600),
+        ("package-cleanup --oldkernels -y", 120),
+    ],
+    "apk": [
+        ("apk update", 120),
+        ("apk upgrade", 600),
+    ],
+}
+
 
 class OsUpdateStep(PipelineStep):
     name = "os_update"
@@ -10,11 +30,7 @@ class OsUpdateStep(PipelineStep):
     skippable = True
 
     def execute(self, ctx: PipelineContext) -> StepResult:
-        commands = [
-            ("apt-get update", 120),
-            ("DEBIAN_FRONTEND=noninteractive apt-get upgrade -y", 600),
-            ("apt-get autoremove --purge -y", 120),
-        ]
+        commands = PACKAGE_MANAGER_COMMANDS[ctx.config.package_manager]
         for cmd, timeout in commands:
             result = ctx.ssh.run(cmd, timeout=timeout, on_output=ctx.on_output)
             if not result.ok:

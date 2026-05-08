@@ -32,7 +32,7 @@ def list_configs(config_dir: Path) -> list[ProjectConfig]:
 
 
 def get_config_dir() -> Path:
-    """Return the configs/ directory."""
-    from biblio_uplift.paths import get_project_root
+    """Return the configs directory."""
+    from biblio_uplift.paths import get_config_dir as _get_config_dir
 
-    return get_project_root() / "configs"
+    return _get_config_dir()

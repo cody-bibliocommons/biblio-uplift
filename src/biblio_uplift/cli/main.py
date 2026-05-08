@@ -18,6 +18,7 @@ from biblio_uplift.config.schema import ProjectConfig
 from biblio_uplift.core.pipeline import Pipeline, PipelineContext
 from biblio_uplift.core.ssh import SSHRunner
 from biblio_uplift.core.steps import get_cleanup_steps, get_upgrade_steps
+from biblio_uplift.core.steps.git import _git_cmd
 from biblio_uplift.history.audit import read_history, record_run
 
 console = Console()
@@ -30,11 +31,11 @@ def setup_logging(debug: bool = False) -> None:
 
     from rich.logging import RichHandler
 
-    from biblio_uplift.paths import get_project_root
+    from biblio_uplift.paths import get_data_dir
 
     session_id = uuid.uuid4().hex[:8]
-    log_dir = get_project_root() / "logs"
-    log_dir.mkdir(exist_ok=True)
+    log_dir = get_data_dir() / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
 
     level = logging.DEBUG if debug else logging.INFO
     file_fmt = f"%(asctime)s [{session_id}] %(levelname)s %(name)s: %(message)s"
@@ -137,6 +138,37 @@ def cli(ctx: click.Context, debug: bool, version: bool) -> None:
 
         app = UpgradeApp(debug=debug)
         app.run()
+
+
+@cli.command()
+def init():
+    """Initialize biblio-uplift config and data directories."""
+    from biblio_uplift.paths import get_data_dir, get_examples_dir
+
+    config_dir = Path.home() / ".config" / "biblio-uplift" / "configs"
+    data_dir = get_data_dir()
+    log_dir = data_dir / "logs"
+
+    config_dir.mkdir(parents=True, exist_ok=True)
+    data_dir.mkdir(parents=True, exist_ok=True)
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    console.print(f"[green]Created config dir:[/] {config_dir}")
+    console.print(f"[green]Created data dir:[/]   {data_dir}")
+    console.print(f"[green]Created log dir:[/]    {log_dir}")
+
+    # Copy example config if no configs exist
+    if not list(config_dir.glob("*.yml")):
+        example = get_examples_dir() / "example.yml"
+        if example.exists():
+            import shutil as _shutil
+
+            dest = config_dir / "example.yml"
+            _shutil.copy2(example, dest)
+            console.print(f"[green]Copied example config:[/] {dest}")
+            console.print("\nEdit the example config and rename it for your project.")
+    else:
+        console.print("[dim]Config directory already has configs, skipping example copy.[/dim]")
 
 
 @cli.command()
@@ -477,7 +509,7 @@ def config_show(project: str) -> None:
 @click.option("--host", required=True, help="SSH hostname")
 @click.option("--project-dir", required=True, help="Remote project directory")
 @click.option("--ssh-user", default="ansible")
-@click.option("--ssh-key", default="~/.ssh/integration.pem")
+@click.option("--ssh-key", default="~/.ssh/id_ed25519")
 def config_create(name: str, host: str, project_dir: str, ssh_user: str, ssh_key: str) -> None:
     """Create a new project configuration."""
     from biblio_uplift.config.loader import save_config
@@ -520,11 +552,7 @@ def config_edit_cmd(project):
     if not path.exists():
         console.print(f"[red]Config not found: {project}[/red]")
         raise SystemExit(1)
-    import os
-    import subprocess
-
-    editor = os.environ.get("EDITOR", "nano")
-    subprocess.call([editor, str(path)])
+    click.edit(filename=str(path))
 
 
 @config_group.command("validate")
@@ -792,18 +820,21 @@ def service_update(project, service, non_interactive):
 
     # Git pull
     console.print("Pulling latest repo...")
-    project_dir = str(config.project_dir)
-    dir_q = shlex.quote(project_dir)
-    git_cmd = (
-        f"grep -q bitbucket.org ~/.ssh/known_hosts 2>/dev/null"
-        f" || ssh-keyscan -t ed25519 bitbucket.org >> ~/.ssh/known_hosts 2>/dev/null; "
-        f"cd {dir_q} && git -c safe.directory={dir_q} fetch origin && "
-        f"git -c safe.directory={dir_q} reset --hard "
-        f"origin/$(git -c safe.directory={dir_q} rev-parse --abbrev-ref HEAD)"
-    )
-    r = ssh.run(f"bash -c {shlex.quote(git_cmd)}", timeout=120)
+    fetch_cmd = _git_cmd(config, "fetch origin")
+    r = ssh.run(fetch_cmd, timeout=120)
     if not r.ok:
-        console.print(f"[red]Git pull failed: {r.stderr}[/red]")
+        console.print(f"[red]Git fetch failed: {r.stderr}[/red]")
+        raise SystemExit(1)
+
+    # Get current branch
+    branch_cmd = _git_cmd(config, "rev-parse --abbrev-ref HEAD")
+    br = ssh.run(branch_cmd, timeout=30)
+    branch = br.stdout.strip() if br.ok else "main"
+
+    reset_cmd = _git_cmd(config, f"reset --hard origin/{branch}")
+    r = ssh.run(reset_cmd, timeout=60)
+    if not r.ok:
+        console.print(f"[red]Git reset failed: {r.stderr}[/red]")
         raise SystemExit(1)
     console.print("  OK")
 
@@ -1003,3 +1034,57 @@ def tool_run(project, tool_name, dry_run, non_interactive):
     else:
         console.print(f"[red]Failed: {result.error}[/red]")
         raise SystemExit(1)
+
+
+@cli.group("settings")
+def settings_group() -> None:
+    """Manage user settings."""
+
+
+@settings_group.command("show")
+def settings_show() -> None:
+    """Show current settings."""
+    from biblio_uplift.settings import load_settings
+
+    settings = load_settings()
+    for key, value in sorted(settings.items()):
+        console.print(f"  {key}: {value}")
+
+
+@settings_group.command("set")
+@click.argument("key")
+@click.argument("value")
+def settings_set(key: str, value: str) -> None:
+    """Set a settings value (key value)."""
+    from biblio_uplift.settings import DEFAULTS, load_settings, save_settings
+
+    if key not in DEFAULTS:
+        console.print(f"[red]Unknown setting: {key}[/red]")
+        console.print(f"Available: {', '.join(sorted(DEFAULTS.keys()))}")
+        raise SystemExit(1)
+
+    settings = load_settings()
+    # Coerce type based on defaults
+    default_val = DEFAULTS[key]
+    if isinstance(default_val, bool):
+        settings[key] = value.lower() in ("true", "1", "yes")
+    elif isinstance(default_val, int):
+        try:
+            settings[key] = int(value)
+        except ValueError:
+            console.print(f"[red]Expected integer for {key}[/red]")
+            raise SystemExit(1) from None
+    else:
+        settings[key] = value
+
+    save_settings(settings)
+    console.print(f"[green]Set {key} = {settings[key]}[/green]")
+
+
+@cli.command()
+def sync() -> None:
+    """Sync config repo (clone or pull)."""
+    from biblio_uplift.settings import sync_config_repo
+
+    result = sync_config_repo()
+    console.print(result)

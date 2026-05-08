@@ -3,29 +3,49 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-_project_root: Path | None = None
 
+def get_config_dir() -> Path:
+    """Resolve config directory.
 
-def get_project_root() -> Path:
-    """Find the project root directory."""
-    global _project_root
-    if _project_root is not None:
-        return _project_root
-
-    # 1. Environment variable override
-    env = os.environ.get("ITOPS_UPGRADE_DIR")
+    Resolution order:
+    1. $BIBLIO_UPLIFT_CONFIG_DIR
+    2. ~/.config/biblio-uplift/configs/ (if exists)
+    3. CWD/configs/ (dev/repo fallback)
+    4. Error
+    """
+    env = os.environ.get("BIBLIO_UPLIFT_CONFIG_DIR")
     if env:
-        _project_root = Path(env)
-        return _project_root
+        return Path(env).expanduser()
 
-    # 2. Walk up from this file looking for .git or configs/
-    current = Path(__file__).resolve().parent
-    for _ in range(5):
-        if (current / "configs").is_dir() or (current / ".git").is_dir():
-            _project_root = current
-            return _project_root
-        current = current.parent
+    xdg = Path.home() / ".config" / "biblio-uplift" / "configs"
+    if xdg.is_dir():
+        return xdg
 
-    # 3. Fallback to cwd
-    _project_root = Path.cwd()
-    return _project_root
+    cwd_configs = Path.cwd() / "configs"
+    if cwd_configs.is_dir():
+        return cwd_configs
+
+    raise FileNotFoundError("No config directory found. Run 'biblio-uplift init' or set $BIBLIO_UPLIFT_CONFIG_DIR")
+
+
+def get_data_dir() -> Path:
+    """Resolve data directory (logs, history, state).
+
+    Resolution order:
+    1. $BIBLIO_UPLIFT_DATA_DIR
+    2. ~/.local/share/biblio-uplift/
+    """
+    env = os.environ.get("BIBLIO_UPLIFT_DATA_DIR")
+    if env:
+        return Path(env).expanduser()
+    return Path.home() / ".local" / "share" / "biblio-uplift"
+
+
+def get_examples_dir() -> Path:
+    """Return path to bundled example configs (inside the installed package)."""
+    return Path(__file__).parent / "examples"
+
+
+def get_settings_path() -> Path:
+    """Return path to user settings JSON file."""
+    return Path.home() / ".config" / "biblio-uplift" / "settings.json"

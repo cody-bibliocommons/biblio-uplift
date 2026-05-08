@@ -5,7 +5,23 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "biblio-uplift"
 version = "0.1.0"
+description = "TUI and CLI tool for managing Docker Compose service upgrades on remote servers via SSH"
+authors = [{name = "Cody Lusk", email = "cody.lusk@bibliocommons.com"}]
+license = {text = "MIT"}
 requires-python = ">=3.10"
+readme = "README.md"
+keywords = ["docker", "compose", "ssh", "upgrade", "tui", "devops"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: System :: Systems Administration",
+]
 dependencies = [
     "textual==8.2.5",
     "rich==15.0.0",
@@ -31,11 +47,15 @@ dev = [
 [project.scripts]
 biblio-uplift = "biblio_uplift.cli.main:cli"
 
+[project.urls]
+Homepage = "https://bitbucket.org/bibliocommons/itops-biblio-uplift"
+Repository = "https://bitbucket.org/bibliocommons/itops-biblio-uplift"
+
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-biblio_uplift = ["tui/css/*.tcss"]
+biblio_uplift = ["examples/*.yml", "tui/**/*.tcss"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -50,18 +70,15 @@ line-length = 120
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "S", "T20", "SIM"]
-ignore = ["S603", "S604", "S602", "S108", "S101", "SIM115", "SIM117", "SIM108", "S110"]
-# S603/S604/S602 = subprocess calls (we need them for SSH)
-# S108 = hardcoded tmp (we use tempfile.gettempdir)
-# S101 = assert (used in tests)
-# SIM115 = context manager for open (we need manual lock file handling)
-# SIM117 = nested with (readability preference)
-# SIM108 = ternary operator (readability preference)
-# S110 = try-except-pass (intentional in TUI error handling)
+ignore = []
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["S101", "S106", "S108", "B017", "SIM108", "E501"]
+"tests/*" = ["S101", "S106", "S108", "B017", "SIM108", "SIM115", "SIM117", "S604", "B007", "E501"]
 "src/biblio_uplift/tui/*" = ["E501"]
+"src/biblio_uplift/core/ssh.py" = ["S603"]
+"src/biblio_uplift/core/pipeline.py" = ["S602"]
+"src/biblio_uplift/history/audit.py" = ["S608"]
+"src/biblio_uplift/settings.py" = ["S603", "S607"]
 
 [tool.mypy]
 python_version = "3.10"

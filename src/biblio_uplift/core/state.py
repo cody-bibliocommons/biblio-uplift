@@ -7,7 +7,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from biblio_uplift.paths import get_project_root
+from biblio_uplift.paths import get_data_dir
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +15,7 @@ STATE_FILE = "resume-state.json"
 
 
 def get_state_path() -> Path:
-    return get_project_root() / "logs" / STATE_FILE
+    return get_data_dir() / STATE_FILE
 
 
 def save_resume_state(
