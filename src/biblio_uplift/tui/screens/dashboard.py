@@ -10,7 +10,7 @@ from textual.widget import Widget
 from textual.widgets import Button, DataTable, Static
 
 from biblio_uplift.config.loader import get_config_dir, list_configs
-from biblio_uplift.history.audit import read_history
+from biblio_uplift.history.audit import get_analytics, read_history
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +23,7 @@ class DashboardPanel(Widget):
     .stat-box { width: 1fr; border: solid $primary-darken-2; padding: 1; margin: 0 1 0 0; }
     .stat-box Static { text-align: center; }
     #dash-table { height: 1fr; }
+    #dash-analytics-summary { height: auto; padding: 0 0 1 0; }
     #dash-activity { height: auto; padding: 1 0 0 0; }
     .dash-actions { height: auto; padding: 1 0; }
     """
@@ -33,6 +34,7 @@ class DashboardPanel(Widget):
             yield Static("", id="stat-projects", classes="stat-box")
             yield Static("", id="stat-runs", classes="stat-box")
             yield Static("", id="stat-alerts", classes="stat-box")
+        yield Static("", id="dash-analytics-summary")
         yield DataTable(id="dash-table")
         yield Static("", id="dash-activity")
         with Horizontal(classes="dash-actions"):
@@ -45,6 +47,11 @@ class DashboardPanel(Widget):
         configs = list_configs(get_config_dir())
         history = read_history(last=50)
 
+        try:
+            analytics = get_analytics(days=30)
+        except Exception:
+            analytics = {}
+
         # Stats
         total_projects = len(configs)
         cutoff = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
@@ -56,10 +63,30 @@ class DashboardPanel(Widget):
         color = "red" if fail_count > 0 else "green"
         self.query_one("#stat-alerts", Static).update(f"[bold {color}]{fail_count}[/bold {color}]\nFailed (24h)")
 
+        # Analytics summary (30d)
+        if analytics:
+            total_runs = analytics.get("total_runs", 0)
+            success_rate = analytics.get("success_rate", 0.0)
+            avg_dur = analytics.get("avg_duration", 0.0)
+            summary = (
+                f"[bold]30-Day Summary:[/bold]  "
+                f"Runs: {total_runs}  |  "
+                f"Success rate: {success_rate:.1f}%  |  "
+                f"Avg duration: {avg_dur:.1f}s"
+            )
+            self.query_one("#dash-analytics-summary", Static).update(summary)
+        else:
+            self.query_one("#dash-analytics-summary", Static).update("")
+
+        # Build failure rate lookup from analytics
+        failure_by_project: dict[str, dict] = {}
+        for entry in analytics.get("failure_rate_by_project", []):
+            failure_by_project[entry["project"]] = entry
+
         # Table
         table = self.query_one("#dash-table", DataTable)
         table.clear(columns=True)
-        table.add_columns("Project", "Host", "Last Run", "Result", "Duration")
+        table.add_columns("Project", "Host", "Last Run", "Result", "Duration", "Avg Dur (30d)", "Fail % (30d)")
 
         for cfg in configs:
             proj_history = [h for h in history if h.get("project") == cfg.name]
@@ -72,7 +99,16 @@ class DashboardPanel(Widget):
                 ts = "Never"
                 result = "\u2014"
                 duration = "\u2014"
-            table.add_row(cfg.name, cfg.ssh_host, ts, result, duration)
+
+            proj_stats = failure_by_project.get(cfg.name)
+            if proj_stats:
+                avg_dur_col = f"{proj_stats.get('avg_duration', 0):.0f}s" if "avg_duration" in proj_stats else "\u2014"
+                fail_pct = f"{proj_stats['pct']:.1f}%"
+            else:
+                avg_dur_col = "\u2014"
+                fail_pct = "\u2014"
+
+            table.add_row(cfg.name, cfg.ssh_host, ts, result, duration, avg_dur_col, fail_pct)
 
         # Recent activity
         recent = history[-5:]

@@ -2,17 +2,28 @@ from __future__ import annotations
 
 import shlex
 
+from biblio_uplift.config.schema import ProjectConfig
 from biblio_uplift.core.pipeline import PipelineContext, PipelineStep, StepResult, StepStatus
 
 
-def _git_cmd(project_dir: str, git_args: str) -> str:
-    """Wrap cd + git in bash -c so sudo doesn't choke on the cd builtin."""
-    dir_q = shlex.quote(project_dir)
-    inner = (
-        f"grep -q bitbucket.org ~/.ssh/known_hosts 2>/dev/null"
-        f" || ssh-keyscan -t ed25519 bitbucket.org >> ~/.ssh/known_hosts 2>/dev/null; "
-        f"cd {dir_q} && git -c safe.directory={dir_q} {git_args}"
-    )
+def _git_cmd(config: ProjectConfig, git_args: str) -> str:
+    """Build a bash -c wrapped git command with ssh-keyscan."""
+    dir_q = shlex.quote(str(config.project_dir))
+    if config.git_host:
+        host_q = shlex.quote(config.git_host)
+        keyscan = (
+            f"grep -q {host_q} ~/.ssh/known_hosts 2>/dev/null"
+            f" || ssh-keyscan -t ed25519 {host_q} >> ~/.ssh/known_hosts 2>/dev/null; "
+        )
+    else:
+        keyscan = (
+            f"GIT_HOST=$(cd {dir_q} && git remote get-url origin 2>/dev/null"
+            f" | sed -n 's|.*@\\([^:/]*\\)[:/].*|\\1|p'); "
+            f'[ -n "$GIT_HOST" ] && {{ '
+            f'grep -q "$GIT_HOST" ~/.ssh/known_hosts 2>/dev/null'
+            f' || ssh-keyscan -t ed25519 "$GIT_HOST" >> ~/.ssh/known_hosts 2>/dev/null; }}; '
+        )
+    inner = f"{keyscan}cd {dir_q} && git -c safe.directory={dir_q} {git_args}"
     return f"bash -c {shlex.quote(inner)}"
 
 
@@ -23,17 +34,16 @@ class GitPullStep(PipelineStep):
 
     def execute(self, ctx: PipelineContext) -> StepResult:
         config = ctx.config
-        project_dir = str(config.project_dir)
         out = ctx.on_output or (lambda x: None)
 
         # 1. Show current commit
-        result = ctx.ssh.run(_git_cmd(project_dir, "log --oneline -1"), on_output=out)
+        result = ctx.ssh.run(_git_cmd(config, "log --oneline -1"), on_output=out)
         if result.ok:
             ctx.state["git_pre_pull_hash"] = result.stdout.strip().split()[0]
             out(f"Current: {result.stdout.strip()}")
 
         # 2. Get current branch
-        branch_result = ctx.ssh.run(_git_cmd(project_dir, "rev-parse --abbrev-ref HEAD"), on_output=out)
+        branch_result = ctx.ssh.run(_git_cmd(config, "rev-parse --abbrev-ref HEAD"), on_output=out)
         branch = branch_result.stdout.strip() if branch_result.ok else "main"
         if config.git_branch:
             branch = config.git_branch
@@ -41,12 +51,12 @@ class GitPullStep(PipelineStep):
 
         # 3. Fetch latest
         out(f"Fetching latest for {branch}...")
-        result = ctx.ssh.run(_git_cmd(project_dir, "fetch origin"), timeout=120, on_output=out)
+        result = ctx.ssh.run(_git_cmd(config, "fetch origin"), timeout=120, on_output=out)
         if not result.ok:
             return StepResult(status=StepStatus.FAILED, error=f"git fetch failed: {result.stderr}")
 
         # 4. Check for uncommitted changes
-        status_result = ctx.ssh.run(_git_cmd(project_dir, "status --porcelain"), timeout=10)
+        status_result = ctx.ssh.run(_git_cmd(config, "status --porcelain"), timeout=10)
         if status_result.ok and status_result.stdout.strip():
             out("WARNING: Uncommitted changes detected on remote, will be overwritten:")
             for line in status_result.stdout.strip().splitlines()[:10]:
@@ -55,7 +65,7 @@ class GitPullStep(PipelineStep):
         # 5. Reset to origin (handles dirty working tree)
         out(f"Resetting to origin/{branch}...")
         result = ctx.ssh.run(
-            _git_cmd(project_dir, f"reset --hard origin/{shlex.quote(branch)}"),
+            _git_cmd(config, f"reset --hard origin/{shlex.quote(branch)}"),
             timeout=30,
             on_output=out,
         )
@@ -63,7 +73,7 @@ class GitPullStep(PipelineStep):
             return StepResult(status=StepStatus.FAILED, error=f"git reset failed: {result.stderr}")
 
         # 6. Show new commit
-        result2 = ctx.ssh.run(_git_cmd(project_dir, "log --oneline -1"), on_output=out)
+        result2 = ctx.ssh.run(_git_cmd(config, "log --oneline -1"), on_output=out)
         if result2.ok:
             out(f"Now at: {result2.stdout.strip()}")
 
@@ -71,7 +81,7 @@ class GitPullStep(PipelineStep):
         pre_hash = ctx.state.get("git_pre_pull_hash", "")
         if pre_hash:
             diff_result = ctx.ssh.run(
-                _git_cmd(project_dir, f"diff --stat {shlex.quote(pre_hash)}..HEAD"),
+                _git_cmd(config, f"diff --stat {shlex.quote(pre_hash)}..HEAD"),
                 on_output=out,
             )
             if diff_result.ok and diff_result.stdout.strip():

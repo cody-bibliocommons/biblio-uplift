@@ -1,0 +1,24 @@
+# Example biblio-uplift configuration
+# Copy to ~/.config/biblio-uplift/configs/ and customize
+name: my-project
+ssh_host: server.example.com
+ssh_user: deploy
+ssh_key: ~/.ssh/id_ed25519
+sudo: true
+
+project_dir: /opt/myapp
+compose_files:
+  - docker-compose.yml
+compose_command: docker compose
+package_manager: apt
+
+backup_dir: /var/backups/myapp
+backup_retention: 5
+
+healthcheck_urls:
+  - http://localhost:8080/health
+
+cleanup:
+  prune_images: true
+  prune_volumes: true
+  prune_build_cache: true

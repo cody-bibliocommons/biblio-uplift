@@ -1,33 +1,53 @@
 import biblio_uplift.paths as paths_mod
 
 
-class TestGetProjectRoot:
-    def setup_method(self):
-        # Reset cached value between tests
-        paths_mod._project_root = None
-
+class TestGetConfigDir:
     def test_env_var(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("ITOPS_UPGRADE_DIR", str(tmp_path))
-        assert paths_mod.get_project_root() == tmp_path
+        monkeypatch.setenv("BIBLIO_UPLIFT_CONFIG_DIR", str(tmp_path))
+        assert paths_mod.get_config_dir() == tmp_path
 
-    def test_finds_git_dir(self, tmp_path, monkeypatch):
-        monkeypatch.delenv("ITOPS_UPGRADE_DIR", raising=False)
-        # Place a .git dir in a parent of the module file
-        fake_root = tmp_path / "project"
-        fake_root.mkdir()
-        (fake_root / ".git").mkdir()
-        # Patch __file__ so the walk-up finds our fake root
-        monkeypatch.setattr(paths_mod, "__file__", str(fake_root / "pkg" / "mod.py"))
-        (fake_root / "pkg").mkdir()
-        paths_mod._project_root = None
-        assert paths_mod.get_project_root() == fake_root
-
-    def test_fallback_to_cwd(self, tmp_path, monkeypatch):
-        monkeypatch.delenv("ITOPS_UPGRADE_DIR", raising=False)
-        # Point __file__ somewhere with no .git or configs/ within 5 levels
-        nowhere = tmp_path / "a" / "b" / "c" / "d" / "e" / "f" / "g"
-        nowhere.mkdir(parents=True)
-        monkeypatch.setattr(paths_mod, "__file__", str(nowhere / "mod.py"))
+    def test_cwd_fallback(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("BIBLIO_UPLIFT_CONFIG_DIR", raising=False)
+        monkeypatch.setenv("HOME", str(tmp_path / "fakehome"))
+        configs = tmp_path / "configs"
+        configs.mkdir()
         monkeypatch.chdir(tmp_path)
-        paths_mod._project_root = None
-        assert paths_mod.get_project_root() == tmp_path
+        assert paths_mod.get_config_dir() == configs
+
+    def test_xdg_config_dir(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("BIBLIO_UPLIFT_CONFIG_DIR", raising=False)
+        fakehome = tmp_path / "fakehome"
+        xdg_configs = fakehome / ".config" / "biblio-uplift" / "configs"
+        xdg_configs.mkdir(parents=True)
+        monkeypatch.setenv("HOME", str(fakehome))
+        assert paths_mod.get_config_dir() == xdg_configs
+
+    def test_raises_when_nothing_found(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("BIBLIO_UPLIFT_CONFIG_DIR", raising=False)
+        monkeypatch.setenv("HOME", str(tmp_path / "fakehome"))
+        monkeypatch.chdir(tmp_path)
+        import pytest
+
+        with pytest.raises(FileNotFoundError):
+            paths_mod.get_config_dir()
+
+
+class TestGetDataDir:
+    def test_env_var(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("BIBLIO_UPLIFT_DATA_DIR", str(tmp_path))
+        assert paths_mod.get_data_dir() == tmp_path
+
+    def test_default(self, monkeypatch):
+        monkeypatch.delenv("BIBLIO_UPLIFT_DATA_DIR", raising=False)
+        from pathlib import Path
+
+        expected = Path.home() / ".local" / "share" / "biblio-uplift"
+        assert paths_mod.get_data_dir() == expected
+
+
+class TestGetExamplesDir:
+    def test_returns_examples_subdir(self):
+        from pathlib import Path
+
+        result = paths_mod.get_examples_dir()
+        assert result == Path(paths_mod.__file__).parent / "examples"

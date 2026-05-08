@@ -7,6 +7,20 @@ from biblio_uplift.core.pipeline import PipelineContext
 from biblio_uplift.core.ssh import SSHResult
 
 
+@pytest.fixture(autouse=True)
+def _reset_audit_connection():
+    """Reset the audit module's thread-local DB connection between tests."""
+    import biblio_uplift.history.audit as audit
+
+    if hasattr(audit._local, "conn"):
+        audit._local.conn.close()
+        del audit._local.conn
+    yield
+    if hasattr(audit._local, "conn"):
+        audit._local.conn.close()
+        del audit._local.conn
+
+
 @pytest.fixture
 def mock_ssh():
     ssh = MagicMock()

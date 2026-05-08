@@ -13,7 +13,7 @@ class TestProjectConfig:
     def test_defaults(self):
         c = ProjectConfig(name="p", ssh_host="h", project_dir="/tmp/x")
         assert c.ssh_user == "ansible"
-        assert c.ssh_key == Path("~/.ssh/integration.pem")
+        assert c.ssh_key == Path("~/.ssh/id_ed25519")
         assert c.sudo is True
         assert c.compose_files == ["docker-compose.yml"]
         assert c.compose_profile is None

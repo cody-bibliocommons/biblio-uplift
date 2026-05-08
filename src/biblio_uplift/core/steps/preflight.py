@@ -2,8 +2,13 @@ from __future__ import annotations
 
 import re
 import shlex
+from datetime import time as dt_time
 
 from biblio_uplift.core.pipeline import PipelineContext, PipelineStep, StepResult, StepStatus
+
+
+def _in_time_window(now: dt_time, start: dt_time, end: dt_time) -> bool:
+    return start <= now <= end if start <= end else now >= start or now <= end
 
 
 class PreflightStep(PipelineStep):
@@ -24,10 +29,7 @@ class PreflightStep(PipelineStep):
                 now = datetime.now().time()
                 start = time.fromisoformat(start_str.strip())
                 end = time.fromisoformat(end_str.strip())
-                if start <= end:
-                    in_window = start <= now <= end
-                else:  # crosses midnight, e.g. 22:00-06:00
-                    in_window = now >= start or now <= end
+                in_window = _in_time_window(now, start, end)
                 if not in_window:
                     msg = (
                         f"Outside maintenance window ({config.maintenance_window}). "

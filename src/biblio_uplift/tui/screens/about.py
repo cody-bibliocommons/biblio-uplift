@@ -156,7 +156,7 @@ class AboutPanel(Widget):
             self.query_one("#about-clock", Static).update(f"⏰ {now}")
 
     def _update_info(self) -> None:
-        try:
+        with contextlib.suppress(Exception):
             import textual
 
             info = (
@@ -184,5 +184,3 @@ class AboutPanel(Widget):
                 "  Docker — Container runtime\n"
             )
             self.query_one("#about-ack", Static).update(ack)
-        except Exception:
-            pass

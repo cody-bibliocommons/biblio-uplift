@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import fcntl
-import json
 import threading
 from unittest.mock import MagicMock, patch
 
-import pytest
 from freezegun import freeze_time
 
 from biblio_uplift.core.pipeline import (
@@ -24,7 +22,7 @@ from biblio_uplift.core.steps.git import GitPullStep
 from biblio_uplift.core.steps.healthcheck import HealthCheckStep
 from biblio_uplift.core.steps.preflight import PreflightStep
 from biblio_uplift.core.steps.system import OsUpdateStep, RebootStep
-from biblio_uplift.history.audit import _rotate_history, read_history, record_run
+from biblio_uplift.history.audit import read_history, record_run
 
 
 def ok(cmd="test", stdout="ok\n"):
@@ -54,11 +52,6 @@ class _FailStep(PipelineStep):
 
 def _make_ctx(mock_ssh, mock_config, **kw):
     return PipelineContext(config=mock_config, ssh=mock_ssh, **kw)
-
-
-def _patch_history(tmp_path):
-    p = tmp_path / "history.jsonl"
-    return patch("biblio_uplift.history.audit._get_history_path", return_value=p)
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -490,92 +483,20 @@ class TestGitRollbackNoHash:
 # ═══════════════════════════════════════════════════════════════════════
 
 
-class TestAuditRotation600:
-    def test_rotation_trims_to_500(self, tmp_path):
-        """Cover lines 67-78: write 600 entries, verify only 500 remain."""
-        with _patch_history(tmp_path):
-            p = tmp_path / "history.jsonl"
-            lines = [json.dumps({"project": f"p{i}", "i": i}) for i in range(600)]
-            p.write_text("\n".join(lines) + "\n")
-            _rotate_history(max_entries=500)
-            remaining = p.read_text().strip().splitlines()
-            assert len(remaining) == 500
-            # Last entry should be p599
-            assert json.loads(remaining[-1])["project"] == "p599"
-            # First entry should be p100
-            assert json.loads(remaining[0])["project"] == "p100"
+class TestAuditSqliteBasic:
+    """Basic audit tests for SQLite backend (replaces old JSONL tests)."""
 
+    def test_record_and_read(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("BIBLIO_UPLIFT_DATA_DIR", str(tmp_path))
+        import biblio_uplift.history.audit as audit
 
-class TestAuditLockContention:
-    def test_rotation_skipped_when_locked(self, tmp_path):
-        """Cover lines 63-64: another process holds the lock."""
-        with _patch_history(tmp_path):
-            p = tmp_path / "history.jsonl"
-            lines = [json.dumps({"project": f"p{i}"}) for i in range(10)]
-            p.write_text("\n".join(lines) + "\n")
-
-            lock_path = p.with_suffix(".lock")
-            lf = open(lock_path, "w")
-            fcntl.flock(lf, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            try:
-                _rotate_history(max_entries=3)
-                # Should skip rotation, file unchanged
-                assert len(p.read_text().strip().splitlines()) == 10
-            finally:
-                fcntl.flock(lf, fcntl.LOCK_UN)
-                lf.close()
-
-
-class TestAuditCorruptJSON:
-    def test_read_history_skips_corrupt_lines(self, tmp_path):
-        """Cover lines 104-105: corrupt JSON lines are skipped."""
-        with _patch_history(tmp_path):
-            p = tmp_path / "history.jsonl"
-            p.write_text(
-                json.dumps({"project": "good", "success": True})
-                + "\n"
-                + "NOT VALID JSON\n"
-                + json.dumps({"project": "also_good", "success": False})
-                + "\n"
-            )
-            entries = read_history()
-            assert len(entries) == 2
-            assert entries[0]["project"] == "good"
-            assert entries[1]["project"] == "also_good"
-
-
-class TestAuditRecordRunTriggersRotation:
-    def test_record_run_rotates(self, tmp_path):
-        """Cover lines 51-52, 58: record_run calls _rotate_history."""
-        with _patch_history(tmp_path):
-            p = tmp_path / "history.jsonl"
-            lines = [json.dumps({"project": f"p{i}"}) for i in range(505)]
-            p.write_text("\n".join(lines) + "\n")
-            record_run("new", "upgrade", [], True, 1.0)
-            remaining = p.read_text().strip().splitlines()
-            # 505 + 1 = 506, rotated to 500
-            assert len(remaining) == 500
-
-
-class TestAuditRecordRunRotationFailure:
-    def test_rotation_failure_is_swallowed(self, tmp_path):
-        """Cover line 58: rotation exception is caught."""
-        with _patch_history(tmp_path):
-            with patch("biblio_uplift.history.audit._rotate_history", side_effect=OSError("disk full")):
-                # Should not raise
-                record_run("proj", "upgrade", [], True, 1.0)
-            p = tmp_path / "history.jsonl"
-            assert p.exists()
-
-
-class TestAuditReadHistoryEmpty:
-    def test_read_skips_blank_lines(self, tmp_path):
-        """Cover line 98: blank lines skipped."""
-        with _patch_history(tmp_path):
-            p = tmp_path / "history.jsonl"
-            p.write_text("\n\n" + json.dumps({"project": "x"}) + "\n\n")
-            entries = read_history()
-            assert len(entries) == 1
+        if hasattr(audit._local, "conn"):
+            audit._local.conn.close()
+            del audit._local.conn
+        record_run("proj", "upgrade", [{"name": "s1", "status": "success", "duration": 1.0}], True, 1.0)
+        entries = read_history()
+        assert len(entries) == 1
+        assert entries[0]["project"] == "proj"
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -747,19 +668,10 @@ class TestOsUpdateSecondCmdFails:
         assert "Command failed" in result.message
 
 
-class TestAuditRotationWriteFailure:
-    """Cover audit.py lines 73-78: write to tmp fails, cleanup."""
+class TestAuditRotationWriteFailureRemoved:
+    """Old JSONL rotation tests removed - now using SQLite."""
 
-    def test_rotation_write_failure(self, tmp_path):
-        with _patch_history(tmp_path):
-            p = tmp_path / "history.jsonl"
-            lines = [json.dumps({"project": f"p{i}"}) for i in range(10)]
-            p.write_text("\n".join(lines) + "\n")
-            with patch("os.fdopen", side_effect=OSError("disk full")):
-                with pytest.raises(OSError, match="disk full"):
-                    _rotate_history(max_entries=3)
-            # Original file should be unchanged
-            assert len(p.read_text().strip().splitlines()) == 10
+    pass
 
 
 class TestSSHRunPipeNone:
@@ -884,27 +796,10 @@ class TestBackupCleanupSafetySkip:
         assert not any("evil" in c for c in rm_cmds)
 
 
-class TestAuditRotationTmpUnlinkFailure:
-    """Cover audit.py lines 76-77: os.unlink fails during cleanup."""
+class TestAuditRotationTmpUnlinkFailureRemoved:
+    """Old JSONL rotation tests removed - now using SQLite."""
 
-    def test_rotation_unlink_failure(self, tmp_path):
-        with _patch_history(tmp_path):
-            p = tmp_path / "history.jsonl"
-            lines = [json.dumps({"project": f"p{i}"}) for i in range(10)]
-            p.write_text("\n".join(lines) + "\n")
-            with patch("os.replace", side_effect=OSError("replace failed")):
-                with patch("os.unlink", side_effect=OSError("unlink failed")):
-                    with pytest.raises(OSError, match="replace failed"):
-                        _rotate_history(max_entries=3)
-
-
-class TestAuditRecordRunCallsRotation:
-    """Cover audit.py line 58: record_run actually calls _rotate_history."""
-
-    def test_record_triggers_rotation(self, tmp_path):
-        with _patch_history(tmp_path), patch("biblio_uplift.history.audit._rotate_history") as mock_rot:
-            record_run("proj", "upgrade", [], True, 1.0)
-            mock_rot.assert_called_once()
+    pass
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -943,13 +838,10 @@ class TestPreflightProjectDirDuParseError:
         assert result.status == StepStatus.SUCCESS
 
 
-class TestAuditRotateNonExistentFile:
-    """Cover audit.py line 58: _rotate_history when file doesn't exist."""
+class TestAuditRotateNonExistentFileRemoved:
+    """Old JSONL rotation tests removed - now using SQLite."""
 
-    def test_rotate_no_file(self, tmp_path):
-        with _patch_history(tmp_path):
-            # Don't create the file
-            _rotate_history()  # should return early, no error
+    pass
 
 
 # ═══════════════════════════════════════════════════════════════════════

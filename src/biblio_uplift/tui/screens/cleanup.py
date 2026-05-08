@@ -62,13 +62,11 @@ class CleanupPanel(Widget):
 
     def on_select_changed(self, event: Select.Changed) -> None:
         if event.select.id == "cleanup-project" and event.value != Select.NULL:
-            try:
+            with contextlib.suppress(Exception):
                 log = self.query_one("#cleanup-log", RichLog)
                 log.clear()
                 log.write(f"Selected: [bold]{event.value}[/bold]")
                 log.write("Configure options and click Run Cleanup.")
-            except Exception:
-                pass
 
     @on(Button.Pressed, "#btn-run-cleanup")
     def handle_run_cleanup(self, event: Button.Pressed) -> None:
@@ -99,22 +97,18 @@ class CleanupPanel(Widget):
 
     def _append_line(self, line: str) -> None:
         """Append a single line to the log widget. Must be called from main thread."""
-        try:
+        with contextlib.suppress(Exception):
             log = self.query_one("#cleanup-log", RichLog)
             log.write(line)
-        except Exception:
-            pass
 
     def on_checkbox_changed(self, event: Checkbox.Changed) -> None:
         if self._task_active:
             return
-        try:
+        with contextlib.suppress(Exception):
             log = self.query_one("#cleanup-log", RichLog)
             label = event.checkbox.label
             state = "enabled" if event.value else "disabled"
             log.write(f"{label}: {state}")
-        except Exception:
-            pass
 
     def _set_cleanup_btn(self, disabled: bool) -> None:
         self.query_one("#btn-run-cleanup", Button).disabled = disabled
@@ -159,11 +153,9 @@ class CleanupPanel(Widget):
 
             def on_step_change(step):
                 def _update():
-                    try:
+                    with contextlib.suppress(Exception):
                         w = self.query_one(f"#cstep-{step.name}", Static)
                         w.update(f"  {STATUS_ICONS[step.status]} {step.name}")
-                    except Exception:
-                        pass
 
                 self.app.call_from_thread(_update)
 

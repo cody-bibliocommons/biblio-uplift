@@ -4,8 +4,7 @@ from biblio_uplift.core.state import clear_resume_state, load_resume_state, save
 
 
 def test_save_and_load(monkeypatch, tmp_path):
-    monkeypatch.setattr("biblio_uplift.core.state.get_project_root", lambda: tmp_path)
-    (tmp_path / "logs").mkdir(exist_ok=True)
+    monkeypatch.setattr("biblio_uplift.core.state.get_data_dir", lambda: tmp_path)
     save_resume_state("test-proj", ["preflight", "backup_files"], {"reboot"}, {"key": "val"})
     state = load_resume_state()
     assert state is not None
@@ -16,14 +15,12 @@ def test_save_and_load(monkeypatch, tmp_path):
 
 
 def test_load_missing(monkeypatch, tmp_path):
-    monkeypatch.setattr("biblio_uplift.core.state.get_project_root", lambda: tmp_path)
-    (tmp_path / "logs").mkdir(exist_ok=True)
+    monkeypatch.setattr("biblio_uplift.core.state.get_data_dir", lambda: tmp_path)
     assert load_resume_state() is None
 
 
 def test_clear(monkeypatch, tmp_path):
-    monkeypatch.setattr("biblio_uplift.core.state.get_project_root", lambda: tmp_path)
-    (tmp_path / "logs").mkdir(exist_ok=True)
+    monkeypatch.setattr("biblio_uplift.core.state.get_data_dir", lambda: tmp_path)
     save_resume_state("test", [], set(), {})
     assert load_resume_state() is not None
     clear_resume_state()
@@ -31,8 +28,6 @@ def test_clear(monkeypatch, tmp_path):
 
 
 def test_load_corrupt_json(monkeypatch, tmp_path):
-    monkeypatch.setattr("biblio_uplift.core.state.get_project_root", lambda: tmp_path)
-    logs = tmp_path / "logs"
-    logs.mkdir(exist_ok=True)
-    (logs / "resume-state.json").write_text("not json")
+    monkeypatch.setattr("biblio_uplift.core.state.get_data_dir", lambda: tmp_path)
+    (tmp_path / "resume-state.json").write_text("not json")
     assert load_resume_state() is None

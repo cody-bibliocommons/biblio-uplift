@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import logging
 
 from textual import on, work
@@ -60,7 +61,7 @@ class ToolsPanel(Widget):
     def on_tree_node_selected(self, event: Tree.NodeSelected) -> None:
         if event.node.data is not None:
             self._selected_tool = event.node.data
-            try:
+            with contextlib.suppress(Exception):
                 log = self.query_one("#tools-log", RichLog)
                 log.clear()
                 tool = self._selected_tool
@@ -72,8 +73,6 @@ class ToolsPanel(Widget):
                 )
                 log.write("")
                 log.write("Select a project and click Run.")
-            except Exception:
-                pass
 
     @on(Button.Pressed, "#btn-run-tool")
     def handle_run(self, event: Button.Pressed) -> None:
@@ -110,6 +109,9 @@ class ToolsPanel(Widget):
 
     @work(thread=True)
     def _run_tool(self, project_name: str, tool, dry_run: bool) -> None:
+        import time as _time
+
+        _tool_start = _time.monotonic()
         logger.info("Tool run: %s on %s (dry_run=%s)", tool.name, project_name, dry_run)
         self._task_active = True
         output_lines: list[str] = []
@@ -152,7 +154,26 @@ class ToolsPanel(Widget):
         except Exception as e:
             logger.error("Tool error: %s", e, exc_info=True)
             output_lines.append(f"[bold red]Error: {e}[/bold red]")
+            _tool_error = str(e)
+            _tool_success = False
+        else:
+            _tool_error = ""
+            _tool_success = "result" in dir() and hasattr(result, "success") and result.success
         finally:
+            _tool_duration = _time.monotonic() - _tool_start
+            try:
+                from biblio_uplift.history.audit import record_tool_execution
+
+                record_tool_execution(
+                    project=project_name,
+                    tool_name=tool.name,
+                    success=_tool_success,
+                    duration=_tool_duration,
+                    dry_run=dry_run,
+                    error=_tool_error,
+                )
+            except Exception as rec_err:
+                logger.debug("Failed to record tool execution: %s", rec_err)
             # Reset tool state
             if hasattr(tool, "target_service"):
                 tool.target_service = ""
