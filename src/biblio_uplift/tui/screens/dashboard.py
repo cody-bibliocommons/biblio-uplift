@@ -48,7 +48,10 @@ class DashboardPanel(Widget):
         history = read_history(last=50)
 
         try:
-            analytics = get_analytics(days=30)
+            from biblio_uplift.settings import load_settings
+
+            settings = load_settings()
+            analytics = get_analytics(days=settings.get("analytics_retention_days", 30))
         except Exception:
             analytics = {}
 

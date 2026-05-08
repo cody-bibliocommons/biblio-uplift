@@ -53,6 +53,11 @@ class UpgradeApp(App):
             from biblio_uplift.cli.main import setup_logging
 
             setup_logging(debug=self._debug)
+        from biblio_uplift.settings import load_settings
+
+        settings = load_settings()
+        if settings.get("theme") == "light":
+            self.theme = "textual-light"
         self._maybe_sync_on_launch()
 
     @work(thread=True)

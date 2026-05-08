@@ -513,6 +513,12 @@ def config_show(project: str) -> None:
 def config_create(name: str, host: str, project_dir: str, ssh_user: str, ssh_key: str) -> None:
     """Create a new project configuration."""
     from biblio_uplift.config.loader import save_config
+    from biblio_uplift.settings import load_settings
+
+    settings = load_settings()
+    # Override defaults with settings values if user didn't provide explicit values
+    if ssh_key == "~/.ssh/id_ed25519":
+        ssh_key = str(settings.get("default_ssh_key", "~/.ssh/id_ed25519"))
 
     config = ProjectConfig(
         name=name,
@@ -521,6 +527,12 @@ def config_create(name: str, host: str, project_dir: str, ssh_user: str, ssh_key
         ssh_user=ssh_user,
         ssh_key=Path(ssh_key),
     )
+
+    # Apply on_failure_cmd from settings if configured
+    notification_cmd = str(settings.get("default_notification_cmd", ""))
+    if notification_cmd:
+        config = config.model_copy(update={"on_failure_cmd": notification_cmd})
+
     path = get_config_dir() / f"{name}.yml"
     if path.exists():
         console.print(f"[red]Config {name} already exists at {path}[/red]")
@@ -548,11 +560,14 @@ def config_delete(project, non_interactive):
 @click.argument("project")
 def config_edit_cmd(project):
     """Open a project config in your editor."""
+    from biblio_uplift.settings import detect_editor, load_settings
+
     path = get_config_dir() / f"{project}.yml"
     if not path.exists():
         console.print(f"[red]Config not found: {project}[/red]")
         raise SystemExit(1)
-    click.edit(filename=str(path))
+    editor = detect_editor(load_settings())
+    click.edit(filename=str(path), editor=editor)
 
 
 @config_group.command("validate")
@@ -730,6 +745,53 @@ def history(project: str | None, last: int) -> None:
         )
 
     console.print(table)
+
+
+@cli.command()
+@click.option("--days", default=30, help="Number of days to analyze")
+@click.option("--project", default=None, help="Filter by project")
+def analytics(days: int, project: str | None):
+    """Show upgrade analytics summary."""
+    from rich.table import Table as RichTable
+
+    from biblio_uplift.history.audit import get_analytics
+
+    data = get_analytics(project=project, days=days)
+
+    console.print(f"\n[bold]Analytics ({days} days)[/bold]\n")
+    console.print(f"  Total runs:   {data.get('total_runs', 0)}")
+    console.print(f"  Success rate: {data.get('success_rate', 0):.1f}%")
+    console.print(f"  Avg duration: {data.get('avg_duration', 0):.0f}s")
+    console.print(f"  Runs/week:    {data.get('runs_per_week', 0):.1f}")
+
+    # Failure rate by project
+    failures = data.get("failure_rate_by_project", [])
+    if failures:
+        console.print("\n[bold]Failure Rate by Project[/bold]")
+        table = RichTable(show_header=True)
+        table.add_column("Project")
+        table.add_column("Runs", justify="right")
+        table.add_column("Failures", justify="right")
+        table.add_column("Rate", justify="right")
+        for row in failures:
+            table.add_row(row["project"], str(row["total"]), str(row["failures"]), f"{row['pct']:.1f}%")
+        console.print(table)
+
+    # Slowest steps
+    slowest = data.get("slowest_steps", [])
+    if slowest:
+        console.print("\n[bold]Slowest Steps (avg)[/bold]")
+        for s in slowest[:5]:
+            console.print(f"  {s['step_name']:20s} {s['avg_seconds']:.1f}s")
+
+    # Tool stats
+    tools = data.get("tool_stats", [])
+    if tools:
+        console.print("\n[bold]Tool Usage[/bold]")
+        for t in tools[:5]:
+            console.print(f"  {t['tool_name']:20s} {t['uses']} uses ({t['success_rate']:.0f}% success)")
+
+    console.print()
 
 
 @cli.command()
@@ -1022,12 +1084,27 @@ def tool_run(project, tool_name, dry_run, non_interactive):
     def out(line):
         console.print(f"  {line}")
 
+    import time
+
     console.print(f"[bold]{selected.name}[/bold] on {config.name}")
+    start = time.monotonic()
     if dry_run and not selected.read_only:
         console.print("[yellow]DRY RUN[/yellow]")
         result = selected.dry_run(ssh, config, out)
     else:
         result = selected.execute(ssh, config, out)
+    duration = time.monotonic() - start
+
+    from biblio_uplift.history.audit import record_tool_execution
+
+    record_tool_execution(
+        project=project,
+        tool_name=selected.name,
+        success=result.success,
+        duration=duration,
+        dry_run=dry_run,
+        error=result.error,
+    )
 
     if result.success:
         console.print("[green]Done.[/green]")

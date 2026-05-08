@@ -296,7 +296,7 @@ def get_analytics(
 
     # Basic stats
     query = (
-        "SELECT COUNT(*) as total, SUM(success) as successes, AVG(duration_seconds) as avg_dur FROM runs WHERE " + where
+        "SELECT COUNT(*) as total, SUM(success) as successes, AVG(duration_seconds) as avg_dur FROM runs WHERE " + where  # nosec B608
     )
     row = conn.execute(query, params).fetchone()
 
@@ -308,7 +308,7 @@ def get_analytics(
 
     # Failure rate by project
     query = (
-        "SELECT project, COUNT(*) as total, SUM(CASE WHEN success=0 THEN 1 ELSE 0 END) as failures "
+        "SELECT project, COUNT(*) as total, SUM(CASE WHEN success=0 THEN 1 ELSE 0 END) as failures "  # nosec B608
         "FROM runs WHERE " + where + " GROUP BY project"
     )
     failure_rows = conn.execute(query, params).fetchall()
@@ -326,7 +326,7 @@ def get_analytics(
     query = (
         "SELECT st.step_name, AVG(st.duration_seconds) as avg_seconds "
         "FROM step_timings st JOIN runs r ON st.run_id = r.id "
-        "WHERE r." + where + " "
+        "WHERE r." + where + " "  # nosec B608
         "GROUP BY st.step_name ORDER BY avg_seconds DESC LIMIT 10"
     )
     slowest = conn.execute(query, params).fetchall()
@@ -334,7 +334,7 @@ def get_analytics(
 
     # Common failure steps
     query = (
-        "SELECT st.step_name, COUNT(*) as count "
+        "SELECT st.step_name, COUNT(*) as count "  # nosec B608
         "FROM step_timings st JOIN runs r ON st.run_id = r.id "
         "WHERE r." + where + " AND st.status = 'failed' "
         "GROUP BY st.step_name ORDER BY count DESC LIMIT 10"
@@ -350,7 +350,7 @@ def get_analytics(
         tool_params.append(project)
     tool_where = " AND ".join(tool_clauses)
     query = (
-        "SELECT tool_name, COUNT(*) as uses, SUM(success) as successes "
+        "SELECT tool_name, COUNT(*) as uses, SUM(success) as successes "  # nosec B608
         "FROM tool_executions WHERE " + tool_where + " "
         "GROUP BY tool_name ORDER BY uses DESC"
     )

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from textual import on
+from textual import on, work
 from textual.app import ComposeResult
 from textual.containers import Horizontal, VerticalScroll
 from textual.widget import Widget
@@ -50,6 +50,7 @@ class ConfigPanel(Widget):
         super().__init__(**kwargs)
         self._current_config: ProjectConfig | None = None
         self._is_new = False
+        self._editor_warned = False
 
     def compose(self) -> ComposeResult:
         yield Static("Configuration Editor", id="config-title")
@@ -61,6 +62,9 @@ class ConfigPanel(Widget):
             yield Button("New", id="btn-new-config", variant="warning", classes="toolbar-btn")
             yield Button("Save", id="btn-save-config", variant="success", disabled=True, classes="toolbar-btn")
             yield Button("Delete", id="btn-delete-config", variant="error", disabled=True, classes="toolbar-btn")
+            yield Button(
+                "Open in Editor", id="btn-open-editor", variant="default", disabled=True, classes="toolbar-btn"
+            )
 
         with VerticalScroll(id="config-form"):
             # -- Core --
@@ -179,6 +183,78 @@ class ConfigPanel(Widget):
         logger.debug("handle_delete fired")
         self._delete_config()
 
+    @on(Button.Pressed, "#btn-open-editor")
+    def _open_in_editor(self, event: Button.Pressed) -> None:
+        """Open current config in external editor, refresh on return."""
+        import os
+
+        select = self.query_one("#config-select", Select)
+        if select.value == Select.NULL:
+            return
+
+        from biblio_uplift.settings import load_settings
+
+        settings = load_settings()
+        has_editor = settings.get("editor") or os.environ.get("EDITOR") or os.environ.get("VISUAL")
+
+        if not has_editor and not self._editor_warned:
+            self._editor_warned = True
+            from biblio_uplift.settings import detect_editor
+
+            detected = detect_editor()
+            self.app.notify(
+                f"No editor configured. Detected [bold]{detected}[/bold].\n"
+                f"Press again to use it, or set one in [bold]Settings[/bold] (key 0).",
+                severity="warning",
+                timeout=8,
+            )
+            return
+
+        self._launch_editor(str(select.value))
+
+    @work(thread=True)
+    def _launch_editor(self, project_name: str) -> None:
+        import shlex
+        import shutil
+        import subprocess
+
+        from biblio_uplift.settings import detect_editor, load_settings
+
+        settings = load_settings()
+        editor = detect_editor(settings)
+        config_dir = get_config_dir()
+        config_path = None
+        for p in config_dir.glob("*.yml"):
+            try:
+                cfg = load_config(p)
+                if cfg.name == project_name:
+                    config_path = p
+                    break
+            except Exception:  # noqa: S112
+                continue
+        if not config_path:
+            return
+
+        if not shutil.which(shlex.split(editor)[0]):
+            self.app.call_from_thread(
+                self.app.notify,
+                f"Editor not found: {editor.split()[0]}",
+                severity="error",
+            )
+            return
+
+        cmd = shlex.split(editor) + [str(config_path)]
+        with self.app.suspend():
+            subprocess.call(cmd)  # noqa: S603
+
+        self.app.call_from_thread(self._reload_config, project_name)
+
+    def _reload_config(self, project_name: str) -> None:
+        """Reload the config into the form after external edit."""
+        select = self.query_one("#config-select", Select)
+        select.value = project_name
+        self._load_config(project_name)
+
     def _new_config(self) -> None:
         """Clear form for a new config."""
         self._current_config = None
@@ -282,6 +358,7 @@ class ConfigPanel(Widget):
 
         self.query_one("#btn-save-config", Button).disabled = False
         self.query_one("#btn-delete-config", Button).disabled = False
+        self.query_one("#btn-open-editor", Button).disabled = False
         self.app.notify(f"Loaded {name}")
 
     def _save_config(self) -> None:

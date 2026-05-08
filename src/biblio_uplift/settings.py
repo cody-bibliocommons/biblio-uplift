@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -21,6 +23,7 @@ DEFAULTS: dict[str, object] = {
     "theme": "dark",
     "analytics_retention_days": 90,
     "default_notification_cmd": "",
+    "editor": "",
 }
 
 
@@ -41,6 +44,51 @@ def save_settings(settings: dict[str, object]) -> None:
     path = get_settings_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(settings, indent=2) + "\n")
+
+
+EDITOR_OPTIONS = [
+    ("code --wait", "VS Code"),
+    ("vim", "Vim"),
+    ("nvim", "Neovim"),
+    ("nano", "Nano"),
+    ("vi", "Vi"),
+    ("micro", "Micro"),
+    ("helix", "Helix"),
+    ("emacs", "Emacs"),
+]
+
+
+def get_available_editors() -> list[tuple[str, str]]:
+    """Return list of (command, display_name) for installed editors."""
+    available = []
+    for cmd, name in EDITOR_OPTIONS:
+        binary = cmd.split()[0]
+        if shutil.which(binary):
+            available.append((cmd, name))
+    return available
+
+
+def detect_editor(settings: dict | None = None) -> str:
+    """Return the configured editor, $EDITOR, or detect from installed programs."""
+    if settings is None:
+        settings = load_settings()
+
+    # 1. Explicit setting
+    if settings.get("editor"):
+        return settings["editor"]
+
+    # 2. Environment variable
+    env_editor = os.environ.get("EDITOR") or os.environ.get("VISUAL")
+    if env_editor:
+        return env_editor
+
+    # 3. Detect from EDITOR_OPTIONS
+    for cmd, _ in EDITOR_OPTIONS:
+        binary = cmd.split()[0]
+        if shutil.which(binary):
+            return cmd
+
+    return "vi"
 
 
 def normalize_git_url(url: str) -> str:
