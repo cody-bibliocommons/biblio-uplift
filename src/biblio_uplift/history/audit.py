@@ -134,7 +134,7 @@ def _migrate_jsonl(conn: sqlite3.Connection) -> None:
                 ),
             )
             run_id = cur.lastrowid
-            assert run_id is not None  # Always set after INSERT
+            if run_id is None: raise RuntimeError("lastrowid was None after INSERT")
             for step in entry.get("steps", []):
                 conn.execute(
                     """INSERT INTO step_timings (run_id, step_name, status, duration_seconds,
@@ -184,7 +184,7 @@ def record_run(
         ),
     )
     run_id = cur.lastrowid
-    assert run_id is not None  # Always set after INSERT
+    if run_id is None: raise RuntimeError("lastrowid was None after INSERT")
     for step in steps:
         conn.execute(
             """INSERT INTO step_timings (run_id, step_name, status, duration_seconds,
