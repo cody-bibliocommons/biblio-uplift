@@ -121,3 +121,29 @@ cleanup:
     - /var/log/auth.log
   cleanup_commands: []
 ```
+
+## App Settings
+
+App-level settings (separate from project configs) are stored in `~/.config/biblio-uplift/settings.json`. These control application behavior rather than individual project upgrades.
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `config_repo_url` | `null` | Git SSH URL for config repo (e.g. `git@github.com:org/configs.git`) |
+| `config_repo_ssh_key` | `~/.ssh/id_ed25519` | SSH key used to clone/pull the config repo |
+| `config_repo_branch` | `main` | Branch to checkout from config repo |
+| `config_sync_on_launch` | `false` | Automatically sync config repo when the app starts |
+| `default_ssh_key` | `~/.ssh/id_ed25519` | Default SSH key for new project configs |
+| `theme` | `dark` | TUI theme (`dark` or `light`) |
+| `analytics_retention_days` | `30` | Days of history to include in analytics |
+| `default_notification_cmd` | `null` | Default shell command for failure notifications |
+| `editor` | `null` | Preferred editor for config editing. Falls back to `$EDITOR`, `$VISUAL`, then auto-detect |
+
+Manage via CLI:
+
+```bash
+biblio-uplift settings show
+biblio-uplift settings set config_repo_url git@github.com:org/configs.git
+biblio-uplift settings set config_sync_on_launch true
+```
+
+See [SETTINGS.md](SETTINGS.md) for details on config repo sync and editor detection.

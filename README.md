@@ -2,8 +2,8 @@
 ![Tests](https://img.shields.io/badge/tests-266%20passed-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-99%25-brightgreen)
 ![Security](https://img.shields.io/badge/security-bandit%20%7C%20pip--audit%20%7C%20gitleaks-green)
-![License](https://img.shields.io/badge/license-internal-lightgrey)
-![Version](https://img.shields.io/badge/version-0.1.0-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+![Version](https://img.shields.io/badge/version-0.2.0-blue)
 ![Tools](https://img.shields.io/badge/tools-18-blue)
 ![TUI](https://img.shields.io/badge/TUI-Textual-purple)
 
@@ -73,6 +73,21 @@ biblio-uplift config delete my-project
 
 # View history
 biblio-uplift history --last 10
+
+# Scaffold config/data directories (first-time setup)
+biblio-uplift init
+
+# View current settings
+biblio-uplift settings show
+
+# Update a setting
+biblio-uplift settings set KEY VALUE
+
+# Sync config repo
+biblio-uplift sync
+
+# Show 30-day upgrade analytics
+biblio-uplift analytics
 ```
 
 ## Screenshots
@@ -145,6 +160,18 @@ post_upgrade_hooks:
   - "/opt/scripts/notify-slack.sh 'Upgrade complete'"
 ```
 
+## Settings
+
+App-level settings are stored in `~/.config/biblio-uplift/settings.json`. Configure via the TUI Settings panel or CLI:
+
+```bash
+biblio-uplift settings show
+biblio-uplift settings set config_repo_url git@github.com:org/configs.git
+biblio-uplift settings set theme dark
+```
+
+Settings include config repo sync (automatically pull project configs from a git repo on launch), editor preference, analytics retention, and theme. See [docs/SETTINGS.md](docs/SETTINGS.md) for details.
+
 ## Upgrade Pipeline
 
 The upgrade runs these steps in order:
@@ -175,9 +202,9 @@ Set `aggressive_prune: true` in the cleanup config to remove *all* unused images
 
 ## TUI
 
-Running `biblio-uplift` with no command launches the interactive terminal UI. It has 8 panels:
+Running `biblio-uplift` with no command launches the interactive terminal UI. It has 10 panels:
 
-- **Dashboard** — Overview of all projects and their last run status
+- **Dashboard** — Overview of all projects and their last run status, 30-day analytics
 - **Upgrade** — Run upgrades interactively with live step progress
 - **Cleanup** — Run cleanup pipelines with live output
 - **Server Status** — View remote server health (disk, memory, uptime, containers)
@@ -185,6 +212,8 @@ Running `biblio-uplift` with no command launches the interactive terminal UI. It
 - **Config Editor** — View and edit project configurations
 - **History** — Browse past upgrade runs with filtering
 - **Tools** — Security audits, log rotation, container management tools
+- **Settings** — App settings, config repo sync, editor detection, theme
+- **About** — Version info and links
 
 ## CLI Flags
 
@@ -262,15 +291,34 @@ config:
 history:
   --project TEXT       Filter by project
   --last INTEGER       Show last N entries (default: 20)
+
+init:
+  Scaffold config and data directories for first-time setup.
+  No options.
+
+settings show:
+  Display all current settings.
+
+settings set KEY VALUE:
+  Update a single setting.
+
+sync:
+  Sync config repo (clone or pull).
+  No options.
+
+analytics:
+  Show 30-day upgrade analytics (success rate, avg duration, slowest steps).
+  No options.
 ```
 
 ## Audit History
 
-Every run is logged to `logs/history.jsonl` with timestamp, project, steps, outcomes, and duration. View with:
+Every run is logged to a SQLite database at `~/.local/share/biblio-uplift/history.db` with tables for runs, step timings, and tool executions. View with:
 
 ```bash
 biblio-uplift history
 biblio-uplift history --project my-project --last 5
+biblio-uplift analytics
 ```
 
 ## Concurrent Run Protection
