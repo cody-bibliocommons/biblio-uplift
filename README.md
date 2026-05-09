@@ -7,7 +7,7 @@
 ![Tools](https://img.shields.io/badge/tools-18-blue)
 ![TUI](https://img.shields.io/badge/TUI-Textual-purple)
 
-![Biblio Uplift](docs/img/banner_211.png)
+![Biblio Uplift](https://raw.githubusercontent.com/cody-bibliocommons/biblio-uplift/main/docs/img/banner_211.png)
 
 # biblio-uplift
 
@@ -54,7 +54,7 @@ biblio-uplift run-all --non-interactive
 biblio-uplift backup list itops-vaultwarden
 
 # Update a single service (pull repo + recreate)
-biblio-uplift service-update itops-identity03 haproxy
+biblio-uplift service-update my-project haproxy
 
 # Check/upgrade Docker Compose install method
 biblio-uplift tool run itops-vaultwarden compose-version
@@ -108,7 +108,7 @@ biblio-uplift config show itops-vaultwarden
 | `name` | required | Project identifier |
 | `ssh_host` | required | Remote server hostname |
 | `ssh_user` | `ansible` | SSH username |
-| `ssh_key` | `~/.ssh/integration.pem` | Path to SSH private key (must not have a passphrase, or use ssh-agent) |
+| `ssh_key` | `~/.ssh/id_ed25519` | Path to SSH private key (must not have a passphrase, or use ssh-agent) |
 | `sudo` | `true` | Prefix remote commands with sudo |
 | `project_dir` | required | Path to the Docker Compose project on the remote server |
 | `compose_files` | `["docker-compose.yml"]` | Compose file(s) to use |
@@ -138,10 +138,10 @@ Pre/post upgrade hooks are arbitrary shell commands executed on the remote serve
 
 ```yaml
 pre_upgrade_hooks:
-  - "systemctl stop bitbucket-runner"
+  - "systemctl stop ci-runner"
   - "/opt/scripts/notify-slack.sh 'Starting upgrade'"
 post_upgrade_hooks:
-  - "systemctl start bitbucket-runner"
+  - "systemctl start ci-runner"
   - "/opt/scripts/notify-slack.sh 'Upgrade complete'"
 ```
 
@@ -155,7 +155,7 @@ The upgrade runs these steps in order:
 1. **Backup volumes** — Export Docker volumes via alpine container
 1. **Backup cleanup** — Remove old backups beyond retention count
 1. **Docker down** — `docker compose down`
-1. **Git pull** — Pull latest from Bitbucket
+1. **Git pull** — Pull latest from remote
 1. **Docker pull** — Pull latest images
 1. **OS update** — `apt-get update && upgrade && autoremove --purge`
 1. **Reboot** — Reboot and wait for SSH to come back
@@ -270,7 +270,7 @@ Every run is logged to `logs/history.jsonl` with timestamp, project, steps, outc
 
 ```bash
 biblio-uplift history
-biblio-uplift history --project itops-identity --last 5
+biblio-uplift history --project my-project --last 5
 ```
 
 ## Concurrent Run Protection

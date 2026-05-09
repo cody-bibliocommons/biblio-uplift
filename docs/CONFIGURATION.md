@@ -8,7 +8,7 @@ Project configs are YAML files stored in `configs/`. Each file defines one remot
 |-------|---------|-------------|
 | `ssh_host` | required | Remote server hostname or IP |
 | `ssh_user` | `ansible` | SSH username |
-| `ssh_key` | `~/.ssh/integration.pem` | Path to SSH private key (no passphrase, or use ssh-agent) |
+| `ssh_key` | `~/.ssh/id_ed25519` | Path to SSH private key (no passphrase, or use ssh-agent) |
 | `ssh_port` | `22` | SSH port |
 | `sudo` | `true` | Prefix remote commands with sudo |
 
@@ -71,30 +71,30 @@ Nested under the `cleanup:` key:
 ## Complete Example
 
 ```yaml
-name: itops-vaultwarden
-ssh_host: ops-liv-vaultwarden01.bcommons.net
-ssh_user: ansible
-ssh_key: ~/.ssh/integration.pem
+name: my-vaultwarden
+ssh_host: server.example.com
+ssh_user: deploy
+ssh_key: ~/.ssh/id_ed25519
 ssh_port: 22
 sudo: true
 
-project_dir: /opt/docker/itops-vaultwarden
+project_dir: /opt/docker/my-vaultwarden
 compose_files:
   - docker-compose.yml
 compose_command: docker compose
 # compose_profile: hostname
 git_branch: main
 
-backup_dir: /var/backups/itops/itops-vaultwarden
+backup_dir: /var/backups/itops/my-vaultwarden
 backup_retention: 5
 volumes:
   - vaultwarden_data
   - vaultwarden_vault
 extra_backup_paths:
-  - /opt/docker/itops-vaultwarden/haproxy
+  - /opt/docker/my-vaultwarden/haproxy
 
 healthcheck_urls:
-  - https://ops-liv-vaultwarden01.bcommons.net
+  - https://server.example.com
 healthcheck_timeout: 120
 
 skip_os_update: false

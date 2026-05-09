@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "biblio-uplift"
 version = "0.1.0"
 description = "TUI and CLI tool for managing Docker Compose service upgrades on remote servers via SSH"
-authors = [{name = "Cody Lusk", email = "cody.lusk@bibliocommons.com"}]
+authors = [{name = "Cody Lusk"}]
 license = {text = "MIT"}
 requires-python = ">=3.10"
 readme = "README.md"
@@ -44,12 +44,13 @@ dev = [
     "freezegun>=1.5.0",
 ]
 
+[project.urls]
+Homepage = "https://github.com/cody-bibliocommons/biblio-uplift"
+Repository = "https://github.com/cody-bibliocommons/biblio-uplift"
+Issues = "https://github.com/cody-bibliocommons/biblio-uplift/issues"
+
 [project.scripts]
 biblio-uplift = "biblio_uplift.cli.main:cli"
-
-[project.urls]
-Homepage = "https://bitbucket.org/bibliocommons/itops-biblio-uplift"
-Repository = "https://bitbucket.org/bibliocommons/itops-biblio-uplift"
 
 [tool.setuptools.packages.find]
 where = ["src"]

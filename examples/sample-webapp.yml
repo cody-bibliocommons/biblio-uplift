@@ -1,35 +1,31 @@
-name: itops-snipeit
-ssh_host: ops-liv-ast01.bcommons.net
-ssh_user: ansible
-ssh_key: ~/.ssh/integration.pem
+name: sample-webapp
+ssh_host: server.example.com
+ssh_user: deploy
+ssh_key: ~/.ssh/id_ed25519
 sudo: true
-project_dir: /opt/docker/itops-snipeit
+project_dir: /opt/myapp
 compose_files:
   - compose.yml
-backup_dir: /var/backups/itops/itops-snipeit
+backup_dir: /var/backups/itops/sample-webapp
 backup_retention: 5
 volumes:
-  - snipeit01_mariadb-data
-  - snipeit01_snipeit-data
+  - myapp-pgdata
+  - myapp-data
 extra_backup_paths:
-  - /opt/docker/itops-snipeit/haproxy
-  - /opt/docker/itops-snipeit/mariadb
+  - /opt/myapp/haproxy
+  - /opt/myapp/config
 healthcheck_urls:
-  - https://ops-liv-ast01.bcommons.net
+  - https://server.example.com
 healthcheck_timeout: 120
 skip_os_update: false
 skip_reboot: false
 # ssh_port: 22
 # git_branch: main
-# maintenance_window: "02:00-06:00"
+# maintenance_window: "Sun 02:00-06:00"
 # on_success_cmd: "curl -X POST https://hooks.slack.com/..."
 # on_failure_cmd: "curl -X POST https://hooks.slack.com/..."
 pre_upgrade_hooks: []
 post_upgrade_hooks: []
-# pre_upgrade_hooks:
-#   - "/opt/scripts/notify-slack.sh 'Starting upgrade'"
-# post_upgrade_hooks:
-#   - "/opt/scripts/notify-slack.sh 'Upgrade complete'"
 cleanup:
   prune_images: true
   prune_volumes: true

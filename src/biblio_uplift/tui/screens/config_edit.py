@@ -76,7 +76,7 @@ class ConfigPanel(Widget):
             yield Label("SSH User")
             yield Input(id="cfg-ssh_user", placeholder="ansible", value="ansible")
             yield Label("SSH Key")
-            yield Input(id="cfg-ssh_key", placeholder="~/.ssh/integration.pem", value="~/.ssh/integration.pem")
+            yield Input(id="cfg-ssh_key", placeholder="~/.ssh/id_ed25519", value="~/.ssh/id_ed25519")
             yield Label("Project Dir")
             yield Input(id="cfg-project_dir", placeholder="/opt/docker/itops-project")
             yield Label("Compose Files (comma-separated)")
@@ -266,7 +266,7 @@ class ConfigPanel(Widget):
                 # Keep defaults for some fields
                 defaults = {
                     "ssh_user": "ansible",
-                    "ssh_key": "~/.ssh/integration.pem",
+                    "ssh_key": "~/.ssh/id_ed25519",
                     "ssh_port": "22",
                     "compose_files": "docker-compose.yml",
                     "compose_command": "docker compose",
