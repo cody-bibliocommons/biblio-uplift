@@ -205,13 +205,13 @@ class Pipeline:
                 self._fire_failure_hook(ctx)
         finally:
             self.end_time = time.monotonic()
-            if success and hasattr(ctx.config, "on_success_cmd") and ctx.config.on_success_cmd:
+            if success and ctx.config.on_success_cmd:
                 self._fire_notification(ctx.config.on_success_cmd, ctx)
         return success
 
     def _fire_failure_hook(self, ctx: PipelineContext) -> None:
         """Execute the on_failure_cmd if configured."""
-        if hasattr(ctx.config, "on_failure_cmd") and ctx.config.on_failure_cmd:
+        if ctx.config.on_failure_cmd:
             self._fire_notification(ctx.config.on_failure_cmd, ctx)
 
     def _fire_notification(self, cmd: str, ctx: PipelineContext) -> None:

@@ -35,6 +35,9 @@ class SettingsPanel(Widget):
         yield Input(id="inp-config-repo-ssh-key", placeholder="~/.ssh/id_ed25519")
         yield Static("Config Repo Branch", classes="settings-label")
         yield Input(id="inp-config-repo-branch", placeholder="main")
+        with Vertical(classes="settings-field"):
+            yield Static("Config Repo Path (subdirectory)")
+            yield Input(value="", id="inp-repo-path", placeholder="configs")
         yield Checkbox("Sync config repo on launch", id="chk-sync-on-launch")
         yield Static("Default SSH Key", classes="settings-label")
         yield Input(id="inp-default-ssh-key", placeholder="~/.ssh/id_ed25519")
@@ -63,6 +66,7 @@ class SettingsPanel(Widget):
         self.query_one("#inp-config-repo-url", Input).value = str(settings.get("config_repo_url", ""))
         self.query_one("#inp-config-repo-ssh-key", Input).value = str(settings.get("config_repo_ssh_key", ""))
         self.query_one("#inp-config-repo-branch", Input).value = str(settings.get("config_repo_branch", ""))
+        self.query_one("#inp-repo-path", Input).value = str(settings.get("config_repo_path", ""))
         self.query_one("#chk-sync-on-launch", Checkbox).value = bool(settings.get("config_sync_on_launch"))
         self.query_one("#inp-default-ssh-key", Input).value = str(settings.get("default_ssh_key", ""))
         self.query_one("#inp-theme", Input).value = str(settings.get("theme", ""))
@@ -103,6 +107,7 @@ class SettingsPanel(Widget):
             "config_repo_url": self.query_one("#inp-config-repo-url", Input).value,
             "config_repo_ssh_key": self.query_one("#inp-config-repo-ssh-key", Input).value,
             "config_repo_branch": self.query_one("#inp-config-repo-branch", Input).value,
+            "config_repo_path": self.query_one("#inp-repo-path", Input).value,
             "config_sync_on_launch": self.query_one("#chk-sync-on-launch", Checkbox).value,
             "default_ssh_key": self.query_one("#inp-default-ssh-key", Input).value,
             "theme": self.query_one("#inp-theme", Input).value,
@@ -136,3 +141,4 @@ class SettingsPanel(Widget):
         settings = self._gather()
         result = sync_config_repo(settings)
         self.app.call_from_thread(self.query_one("#settings-status", Static).update, result)
+        self.app.call_from_thread(self.app.refresh_config_selects)

@@ -67,7 +67,25 @@ class UpgradeApp(App):
         settings = load_settings()
         if settings.get("config_sync_on_launch"):
             logger.info("Auto-syncing config repo on launch")
-            sync_config_repo(settings)
+            result = sync_config_repo(settings)
+            logger.info("Auto-sync result: %s", result)
+            self.call_from_thread(self.refresh_config_selects)
+
+    def refresh_config_selects(self) -> None:
+        """Refresh all project Select widgets with current configs."""
+        import contextlib
+
+        from biblio_uplift.config.loader import get_config_dir, list_configs
+
+        with contextlib.suppress(Exception):
+            configs = list_configs(get_config_dir())
+            options = [(cfg.name, cfg.name) for cfg in configs]
+            for select in self.query("Select"):
+                if select.id and ("project" in select.id or "select" in select.id):
+                    current = select.value
+                    select.set_options(options)
+                    if current in [v for _, v in options]:
+                        select.value = current
 
     def compose(self) -> ComposeResult:
         yield Header()

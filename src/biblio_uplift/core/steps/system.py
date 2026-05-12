@@ -89,6 +89,6 @@ class RebootStep(PipelineStep):
 
         return StepResult(
             status=StepStatus.FAILED,
-            error="Server did not come back within 300s",
+            error=f"Server did not come back within {ctx.config.reboot_timeout}s",
             message="Reboot timeout",
         )

@@ -18,6 +18,7 @@ DEFAULTS: dict[str, object] = {
     "config_repo_url": "",
     "config_repo_ssh_key": "~/.ssh/id_ed25519",
     "config_repo_branch": "main",
+    "config_repo_path": "configs",
     "config_sync_on_launch": False,
     "default_ssh_key": "~/.ssh/id_ed25519",
     "theme": "dark",
@@ -131,50 +132,59 @@ def is_https_url(url: str) -> bool:
 
 
 def sync_config_repo(settings: dict[str, object] | None = None) -> str:
-    """Clone or pull the config repo. Returns status message."""
+    """Clone or pull the config repo, then copy configs to the config dir."""
     if settings is None:
         settings = load_settings()
 
-    repo_url = str(settings.get("config_repo_url", ""))
-    if not repo_url:
+    url = str(settings.get("config_repo_url", "")).strip()
+    if not url:
         return "No config_repo_url configured"
 
-    repo_url = normalize_git_url(repo_url)
+    url = normalize_git_url(url)
     branch = str(settings.get("config_repo_branch", "main"))
-    ssh_key = str(settings.get("config_repo_ssh_key", "~/.ssh/id_ed25519"))
-    ssh_key_path = Path(ssh_key).expanduser()
+    key_path = Path(str(settings.get("config_repo_ssh_key", "~/.ssh/id_ed25519"))).expanduser()
+    repo_path = (settings.get("config_repo_path") or "configs").strip()
 
-    config_dir = Path.home() / ".config" / "biblio-uplift" / "configs"
-    config_dir.mkdir(parents=True, exist_ok=True)
+    # Clone/pull into a cache directory (separate from config dir)
+    from biblio_uplift.paths import get_data_dir
+    cache_dir = get_data_dir() / "config-repo"
+    cache_dir.mkdir(parents=True, exist_ok=True)
 
-    env_extra = {}
-    if not is_https_url(repo_url) and ssh_key_path.exists():
-        env_extra["GIT_SSH_COMMAND"] = f"ssh -i {ssh_key_path} -o StrictHostKeyChecking=accept-new"
+    env_ssh = f"ssh -i {key_path} -o StrictHostKeyChecking=accept-new"
+    env = {**os.environ, "GIT_SSH_COMMAND": env_ssh}
 
     try:
-        if (config_dir / ".git").is_dir():
-            # Pull
-            result = subprocess.run(
-                ["git", "-C", str(config_dir), "pull", "--ff-only", "origin", branch],
-                capture_output=True,
-                text=True,
-                timeout=60,
-                env={**__import__("os").environ, **env_extra},
+        if (cache_dir / ".git").is_dir():
+            subprocess.run(
+                ["git", "-C", str(cache_dir), "pull", "origin", branch],
+                env=env, capture_output=True, text=True, check=True, timeout=30,
             )
         else:
-            # Clone
-            result = subprocess.run(
-                ["git", "clone", "-b", branch, repo_url, str(config_dir)],
-                capture_output=True,
-                text=True,
-                timeout=60,
-                env={**__import__("os").environ, **env_extra},
+            subprocess.run(
+                ["git", "clone", "-b", branch, url, str(cache_dir)],
+                env=env, capture_output=True, text=True, check=True, timeout=60,
             )
-
-        if result.returncode == 0:
-            return "Sync OK"
-        return f"Sync failed: {result.stderr.strip()}"
+    except subprocess.CalledProcessError as e:
+        logger.error("Config repo sync failed: %s", e.stderr)
+        return f"Sync failed: {e.stderr.strip()}"
     except subprocess.TimeoutExpired:
         return "Sync timed out"
-    except OSError as e:
-        return f"Sync error: {e}"
+
+    # Copy configs from repo subdirectory to config dir
+    source = cache_dir / repo_path if repo_path else cache_dir
+    if not source.is_dir():
+        return f"Path '{repo_path}' not found in repo"
+
+    try:
+        from biblio_uplift.paths import get_config_dir
+        dest = get_config_dir()
+    except FileNotFoundError:
+        dest = Path.home() / ".config" / "biblio-uplift" / "configs"
+    dest.mkdir(parents=True, exist_ok=True)
+
+    count = 0
+    for yml in source.glob("*.yml"):
+        shutil.copy2(yml, dest / yml.name)
+        count += 1
+
+    return f"Synced {count} configs from {branch}/{repo_path}"

@@ -1,0 +1,54 @@
+name: itops-identity
+ssh_host: ops-liv-identity01.bcommons.net
+ssh_user: ansible
+ssh_key: ~/.ssh/integration.pem
+sudo: true
+project_dir: /opt/docker/itops-identity
+compose_files:
+  - compose.yml
+compose_profile: hostname
+backup_dir: /var/backups/itops/itops-identity
+backup_retention: 5
+volumes:
+  - ops-liv-identity01-pgdata
+  - ops-liv-identity01-freeipa-data
+  - ops-liv-identity01-fluent-bit-data
+  - ops-liv-identity01-ssl
+extra_backup_paths:
+  - /opt/docker/itops-identity/haproxy
+  - /opt/docker/itops-identity/keepalived
+  - /opt/docker/itops-identity/fluent-bit
+  - /opt/docker/itops-identity/freeipa
+healthcheck_urls:
+  - https://ops-liv-identity01.bcommons.net
+healthcheck_timeout: 180
+skip_os_update: false
+skip_reboot: false
+# ssh_port: 22
+# git_branch: main
+# maintenance_window: "02:00-06:00"
+# on_success_cmd: "curl -X POST https://hooks.slack.com/..."
+# on_failure_cmd: "curl -X POST https://hooks.slack.com/..."
+pre_upgrade_hooks: []
+post_upgrade_hooks: []
+# pre_upgrade_hooks:
+#   - "/opt/scripts/notify-slack.sh 'Starting upgrade'"
+# post_upgrade_hooks:
+#   - "/opt/scripts/notify-slack.sh 'Upgrade complete'"
+cleanup:
+  prune_images: true
+  prune_volumes: true
+  prune_containers: true
+  prune_build_cache: true
+  log_retention_days: 30
+  log_paths:
+    - /var/log/syslog
+    - /var/log/auth.log
+    - /var/log/identity-freeipa-tar-cron.log
+  cleanup_commands:
+    - "docker exec freeipa01 truncate -s 0 /var/log/httpd/error_log"
+    - "docker exec freeipa01 truncate -s 0 /var/log/httpd/access_log"
+    - "docker exec freeipa01 truncate -s 0 /var/log/httpd/ssl_request_log"
+    - "docker exec freeipa01 truncate -s 0 /var/log/krb5kdc.log"
+    - "docker exec freeipa01 find /var/log/dirsrv -name 'access.*' -mtime +7 -delete"
+    - "docker exec freeipa01 find /var/log/dirsrv -name 'errors.*' -mtime +7 -delete"
