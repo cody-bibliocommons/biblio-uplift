@@ -141,12 +141,13 @@ pipelines:
           name: Sync to GitHub
           script:
             - apt-get update && apt-get install -y git
-            - git remote add github https://x-token-auth:${GITHUB_TOKEN}@github.com/cody-bibliocommons/biblio-uplift.git || true
-            - git checkout -b _github_mirror
-            - git rm -rf configs/ --cached --quiet || true
-            - git commit -m "mirror: exclude private configs" --allow-empty
-            - git push github _github_mirror:main --force
-            - git push github --tags --force
+            - |
+              git remote add github https://x-token-auth:${GITHUB_TOKEN}@github.com/cody-bibliocommons/biblio-uplift.git || true
+              git checkout -b _github_mirror
+              git rm -rf configs/ --cached --quiet || true
+              git commit -m "mirror" --allow-empty
+              git push github _github_mirror:main --force
+              git push github --tags --force
 
   custom:
     full-security-audit:
