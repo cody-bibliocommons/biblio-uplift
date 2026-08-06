@@ -1,7 +1,7 @@
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![Tests](https://img.shields.io/badge/tests-266%20passed-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-99%25-brightgreen)
-![Security](https://img.shields.io/badge/security-bandit%20%7C%20pip--audit%20%7C%20gitleaks-green)
+![Security](https://img.shields.io/badge/security-bandit%20%7C%20pip--audit%20%7C%20betterleaks-green)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Version](https://img.shields.io/badge/version-0.2.0-blue)
 ![Tools](https://img.shields.io/badge/tools-18-blue)

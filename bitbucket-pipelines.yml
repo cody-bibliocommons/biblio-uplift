@@ -84,9 +84,9 @@ definitions:
 
     - step: &security-secrets
         name: Security - Secret Scan
-        image: zricethezav/gitleaks:latest
+        image: ghcr.io/betterleaks/betterleaks:v1.7.3
         script:
-          - gitleaks detect --source . --verbose
+          - betterleaks git . -v
 
 pipelines:
   default:
