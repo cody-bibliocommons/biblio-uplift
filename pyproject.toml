@@ -35,7 +35,7 @@ dev = [
     "pytest==9.1.1",
     "pytest-cov==7.1.0",
     "bandit==1.9.4",
-    "safety==3.7.0",
+    "safety==3.8.1",
     "mypy==1.20.2",
     "ruff==0.15.12",
     "types-PyYAML==6.0.12.20260724",
