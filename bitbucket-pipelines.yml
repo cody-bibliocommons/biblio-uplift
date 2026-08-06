@@ -86,7 +86,7 @@ definitions:
         name: Security - Secret Scan
         image: ghcr.io/betterleaks/betterleaks:v1.7.3
         script:
-          - betterleaks git . -v
+          - betterleaks git . -v --redact
 
 pipelines:
   default:
@@ -113,6 +113,7 @@ pipelines:
       - parallel:
           - step: *security-sast
           - step: *security-deps
+          - step: *security-secrets
 
   branches:
     main:
