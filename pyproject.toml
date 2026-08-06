@@ -23,7 +23,7 @@ classifiers = [
     "Topic :: System :: Systems Administration",
 ]
 dependencies = [
-    "textual==8.2.5",
+    "textual==8.2.8",
     "rich==15.0.0",
     "click==8.3.3",
     "pydantic==2.13.4",
