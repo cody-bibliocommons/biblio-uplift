@@ -69,14 +69,14 @@ def get_available_editors() -> list[tuple[str, str]]:
     return available
 
 
-def detect_editor(settings: dict | None = None) -> str:
+def detect_editor(settings: dict[str, object] | None = None) -> str:
     """Return the configured editor, $EDITOR, or detect from installed programs."""
     if settings is None:
         settings = load_settings()
 
     # 1. Explicit setting
     if settings.get("editor"):
-        return settings["editor"]
+        return str(settings["editor"])
 
     # 2. Environment variable
     env_editor = os.environ.get("EDITOR") or os.environ.get("VISUAL")
@@ -143,10 +143,11 @@ def sync_config_repo(settings: dict[str, object] | None = None) -> str:
     url = normalize_git_url(url)
     branch = str(settings.get("config_repo_branch", "main"))
     key_path = Path(str(settings.get("config_repo_ssh_key", "~/.ssh/id_ed25519"))).expanduser()
-    repo_path = (settings.get("config_repo_path") or "configs").strip()
+    repo_path = str(settings.get("config_repo_path") or "configs").strip()
 
     # Clone/pull into a cache directory (separate from config dir)
     from biblio_uplift.paths import get_data_dir
+
     cache_dir = get_data_dir() / "config-repo"
     cache_dir.mkdir(parents=True, exist_ok=True)
 
@@ -157,12 +158,20 @@ def sync_config_repo(settings: dict[str, object] | None = None) -> str:
         if (cache_dir / ".git").is_dir():
             subprocess.run(
                 ["git", "-C", str(cache_dir), "pull", "origin", branch],
-                env=env, capture_output=True, text=True, check=True, timeout=30,
+                env=env,
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=30,
             )
         else:
             subprocess.run(
                 ["git", "clone", "-b", branch, url, str(cache_dir)],
-                env=env, capture_output=True, text=True, check=True, timeout=60,
+                env=env,
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=60,
             )
     except subprocess.CalledProcessError as e:
         logger.error("Config repo sync failed: %s", e.stderr)
@@ -177,6 +186,7 @@ def sync_config_repo(settings: dict[str, object] | None = None) -> str:
 
     try:
         from biblio_uplift.paths import get_config_dir
+
         dest = get_config_dir()
     except FileNotFoundError:
         dest = Path.home() / ".config" / "biblio-uplift" / "configs"
