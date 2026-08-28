@@ -37,7 +37,7 @@ dev = [
     "bandit==1.9.4",
     "safety==3.8.1",
     "mypy==2.3.1",
-    "ruff==0.16.4",
+    "ruff==0.16.5",
     "types-PyYAML==6.0.12.20260815",
     "yamllint>=1.35.0",
     "mdformat>=0.7.0",
