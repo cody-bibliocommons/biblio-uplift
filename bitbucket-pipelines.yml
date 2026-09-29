@@ -84,7 +84,7 @@ definitions:
 
     - step: &security-secrets
         name: Security - Secret Scan
-        image: ghcr.io/betterleaks/betterleaks:v1.8.1
+        image: ghcr.io/betterleaks/betterleaks:v1.9.0
         script:
           - betterleaks git . -v --redact
 
