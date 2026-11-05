@@ -339,8 +339,8 @@ class UpdateServiceTool(Tool):
         project_dir = str(config.project_dir)
         dir_q = shlex.quote(project_dir)
         git_cmd = (
-            f"grep -q bitbucket.org ~/.ssh/known_hosts 2>/dev/null"
-            f" || ssh-keyscan -t ed25519 bitbucket.org >> ~/.ssh/known_hosts 2>/dev/null; "
+            f"grep -q ssh.bitbucket.org ~/.ssh/known_hosts 2>/dev/null"
+            f" || ssh-keyscan -t ed25519 bitbucket.org ssh.bitbucket.org >> ~/.ssh/known_hosts 2>/dev/null; "
             f"cd {dir_q} && git -c safe.directory={dir_q} fetch origin && "
             f"git -c safe.directory={dir_q} reset --hard "
             f"origin/$(git -c safe.directory={dir_q} rev-parse --abbrev-ref HEAD)"

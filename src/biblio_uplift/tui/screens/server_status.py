@@ -102,8 +102,8 @@ class ServerStatusPanel(Widget):
         # Git
         dir_q = shlex.quote(str(config.project_dir))
         inner = (
-            f"grep -q bitbucket.org ~/.ssh/known_hosts 2>/dev/null"
-            f" || ssh-keyscan -t ed25519 bitbucket.org >> ~/.ssh/known_hosts 2>/dev/null; "
+            f"grep -q ssh.bitbucket.org ~/.ssh/known_hosts 2>/dev/null"
+            f" || ssh-keyscan -t ed25519 bitbucket.org ssh.bitbucket.org >> ~/.ssh/known_hosts 2>/dev/null; "
             f"cd {dir_q} && git -c safe.directory={dir_q} log --oneline -1"
         )
         r = ssh.run(f"bash -c {shlex.quote(inner)}")
